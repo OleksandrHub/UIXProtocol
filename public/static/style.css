@@ -1,0 +1,147 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+  --primary: #2a6df4;
+  --danger: #c0392b;
+  --bg: #f5f5f7;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font: inherit; cursor: pointer; }
+
+.error { color: var(--danger); font-size: .85rem; min-height: 1em; }
+.link {
+  font-size: .85rem; color: var(--primary); text-decoration: none;
+  text-align: center; margin-top: .25rem;
+}
+.link:hover { text-decoration: underline; }
+
+.page-login {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.card {
+  display: flex; flex-direction: column; gap: .75rem;
+  width: 320px; padding: 2rem;
+  background: white; border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.08);
+}
+.card h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
+.card input {
+  padding: .625rem .75rem;
+  border: 1px solid #ddd; border-radius: 6px;
+  font-size: .95rem; font-family: inherit;
+}
+.card button[type="submit"] {
+  padding: .625rem;
+  border: 0; border-radius: 6px;
+  background: var(--primary); color: white;
+  font-weight: 600; font-size: .95rem;
+}
+.card button[type="submit"]:disabled { opacity: .5; cursor: not-allowed; }
+
+.page-user {
+  height: 100vh; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.bar {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .5rem 1rem;
+  background: #1f1f23; color: #eee;
+  font-size: .875rem;
+}
+.bar .user { font-weight: 600; margin-right: auto; }
+.bar a, .bar button {
+  color: inherit; background: transparent;
+  border: 1px solid #555; padding: .25rem .75rem;
+  border-radius: 4px; text-decoration: none; font: inherit;
+}
+.bar a:hover, .bar button:hover { background: #2a2a30; }
+.frame { flex: 1; width: 100%; border: 0; display: block; }
+
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal[hidden] { display: none; }
+.modal__card {
+  background: white; padding: 1.5rem;
+  border-radius: 12px;
+  width: 460px; max-width: 92vw;
+  display: flex; flex-direction: column; gap: .75rem;
+}
+.modal__card h2 { margin: 0; }
+.modal__card label {
+  display: flex; flex-direction: column; gap: .25rem;
+  font-size: .9rem;
+}
+.modal__card input, .modal__card textarea {
+  padding: .5rem .75rem;
+  border: 1px solid #ddd; border-radius: 6px;
+  font: inherit;
+}
+.modal__actions {
+  display: flex; gap: .5rem; justify-content: flex-end; margin-top: .5rem;
+}
+.modal__actions button {
+  padding: .5rem 1rem;
+  border: 0; border-radius: 6px;
+  font-weight: 600;
+}
+.modal__actions button#settingsCancel { background: #eee; }
+.modal__actions button#settingsSave { background: var(--primary); color: white; }
+
+.page-admin { background: white; }
+.admin { padding: 2rem; max-width: 1100px; margin: 0 auto; }
+.admin__header {
+  display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;
+}
+.admin__header h1 { margin: 0; font-size: 1.5rem; }
+.admin__spacer { flex: 1; }
+.admin__header .btn {
+  padding: .4rem .75rem;
+  border: 1px solid #ccc; background: white;
+  border-radius: 6px; text-decoration: none; color: inherit;
+}
+.section { margin-bottom: 2.5rem; }
+.section h2 { margin: 0 0 .75rem; font-size: 1.1rem; }
+.form { display: grid; gap: .5rem; max-width: 520px; }
+.form label {
+  display: flex; flex-direction: column; gap: .25rem;
+  font-size: .9rem;
+}
+.form input, .form textarea {
+  padding: .5rem .75rem;
+  border: 1px solid #ddd; border-radius: 6px;
+  font: inherit;
+}
+.form .check { flex-direction: row; align-items: center; }
+.form__actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.form__actions button {
+  padding: .5rem 1rem;
+  border: 0; border-radius: 6px;
+  font-weight: 600;
+}
+.form__actions button#submitBtn { background: var(--primary); color: white; }
+.form__actions button#resetBtn { background: #eee; }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td {
+  padding: .5rem .75rem;
+  border-bottom: 1px solid #eee;
+  text-align: left; vertical-align: middle;
+}
+.table th { font-size: .85rem; color: #666; font-weight: 600; }
+.table .truncate {
+  max-width: 320px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.table button {
+  padding: .25rem .5rem;
+  border: 1px solid #ccc; background: white;
+  border-radius: 4px; margin-right: .25rem;
+}
+.table button.danger { border-color: var(--danger); color: var(--danger); }
