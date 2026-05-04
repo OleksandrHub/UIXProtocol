@@ -4,6 +4,7 @@ import {
   createUser,
   deleteUser,
   getUserById,
+  getUserByName,
   listUsers,
   updateUser,
   verifyPasswordById,
@@ -136,6 +137,15 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         proxyPath: '/_p/',
         iframePermissions: environment.iframePermissions,
       });
+      return true;
+    }
+
+    const byNameMatch = path.match(/^\/api\/users\/by-name\/([^/]+)$/);
+    if (byNameMatch && req.method === 'GET') {
+      const name = decodeURIComponent(byNameMatch[1]!);
+      const u = getUserByName(name);
+      if (!u) sendJson(res, 404, { error: 'not found' });
+      else sendJson(res, 200, { id: u.id, name: u.name, targetUrl: u.targetUrl });
       return true;
     }
 

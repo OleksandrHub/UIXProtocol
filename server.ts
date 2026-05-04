@@ -5,12 +5,14 @@ import * as path from 'node:path';
 import { URL } from 'node:url';
 
 import { handleApi } from './api';
-import { getSessionUserId, SESSION_COOKIE_NAME } from './session';
+import { getSessionUserId, parseCookie, SESSION_COOKIE_NAME } from './session';
 import { getUserById } from './db';
 import { environment } from './environments/environment';
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const PROXY_PREFIX = '/_p';
+const PREVIEW_RE = /^\/_p\/(\d+)(\/.*)?$/;
+const PREVIEW_COOKIE = 'uix_preview';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -52,25 +54,19 @@ function rewriteUrls(text: string, targetHost: string): string {
     .replaceAll(`http://${targetHost}`, '');
 }
 
-function proxyHandle(req: http.IncomingMessage, res: http.ServerResponse): void {
-  const uid = getSessionUserId(req);
-  if (uid == null) {
-    res.writeHead(403, { 'Content-Type': 'text/plain' });
-    res.end('Not authenticated');
-    return;
-  }
-  const user = getUserById(uid);
-  if (!user) {
-    res.writeHead(403, { 'Content-Type': 'text/plain' });
-    res.end('User not found');
-    return;
-  }
-  const targetRaw = (user.targetUrl || environment.defaultTarget).trim();
-  if (!targetRaw) {
-    res.writeHead(400, { 'Content-Type': 'text/plain' });
-    res.end('No target URL set for this user');
-    return;
-  }
+interface ProxyOpts {
+  sendCookies?: boolean;
+  stripSetCookie?: boolean;
+  setPreviewCookie?: number;
+}
+
+function performProxy(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  targetRaw: string,
+  pathOnly: string,
+  opts: ProxyOpts = {}
+): void {
   const TARGET = /^https?:\/\//i.test(targetRaw) ? targetRaw : `https://${targetRaw}`;
   let targetHost: string;
   try {
@@ -81,18 +77,17 @@ function proxyHandle(req: http.IncomingMessage, res: http.ServerResponse): void 
     return;
   }
 
-  let reqPath = req.url ?? '/';
-  if (reqPath.startsWith(PROXY_PREFIX)) reqPath = reqPath.slice(PROXY_PREFIX.length) || '/';
+  let reqPath = pathOnly;
   if (reqPath.startsWith(`https://${targetHost}`))
     reqPath = reqPath.slice(`https://${targetHost}`.length) || '/';
   if (reqPath.startsWith(`http://${targetHost}`))
     reqPath = reqPath.slice(`http://${targetHost}`.length) || '/';
 
-  const targetUrl = new URL(reqPath === '/' ? '/' : reqPath, TARGET);
+  const targetUrl = reqPath === '/' ? new URL(TARGET) : new URL(reqPath, TARGET);
 
   const cookieHeader = req.headers['cookie'];
   let cleanedCookie: string | undefined;
-  if (typeof cookieHeader === 'string' && cookieHeader.length) {
+  if (opts.sendCookies !== false && typeof cookieHeader === 'string' && cookieHeader.length) {
     const filtered = cookieHeader
       .split(';')
       .map((s) => s.trim())
@@ -131,14 +126,25 @@ function proxyHandle(req: http.IncomingMessage, res: http.ServerResponse): void 
       if (headers['location']) {
         headers['location'] = rewriteUrls(String(headers['location']), targetHost);
       }
-      const setCookie = headers['set-cookie'];
-      if (Array.isArray(setCookie)) {
-        headers['set-cookie'] = setCookie.map((c) =>
-          c
-            .replace(/Domain=[^;]+;?\s*/gi, '')
-            .replace(/Secure;?\s*/gi, '')
-            .replace(/SameSite=[^;]+;?\s*/gi, 'SameSite=Lax; ')
-        );
+      if (opts.stripSetCookie) {
+        delete headers['set-cookie'];
+      } else {
+        const setCookie = headers['set-cookie'];
+        if (Array.isArray(setCookie)) {
+          headers['set-cookie'] = setCookie.map((c) =>
+            c
+              .replace(/Domain=[^;]+;?\s*/gi, '')
+              .replace(/Secure;?\s*/gi, '')
+              .replace(/SameSite=[^;]+;?\s*/gi, 'SameSite=Lax; ')
+          );
+        }
+      }
+      if (opts.setPreviewCookie != null) {
+        const cookie = `${PREVIEW_COOKIE}=${opts.setPreviewCookie}; HttpOnly; Path=/; SameSite=Lax`;
+        const sc = headers['set-cookie'];
+        if (Array.isArray(sc)) sc.push(cookie);
+        else if (typeof sc === 'string') headers['set-cookie'] = [sc, cookie];
+        else headers['set-cookie'] = [cookie];
       }
       delete headers['x-frame-options'];
       delete headers['content-security-policy'];
@@ -181,6 +187,83 @@ function proxyHandle(req: http.IncomingMessage, res: http.ServerResponse): void 
   });
 }
 
+function proxyForUser(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  userId: number,
+  reqPath: string,
+  preview: boolean
+): void {
+  const user = getUserById(userId);
+  if (!user) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('User not found');
+    return;
+  }
+  const target = (user.targetUrl || environment.defaultTarget).trim();
+  if (!target) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('No target URL set for this user');
+    return;
+  }
+  performProxy(
+    req,
+    res,
+    target,
+    reqPath,
+    preview ? { sendCookies: false, stripSetCookie: true, setPreviewCookie: userId } : {}
+  );
+}
+
+function getCookiePreviewId(req: http.IncomingMessage): number | null {
+  const v = parseCookie(req, PREVIEW_COOKIE);
+  if (!v) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function getRefererPreviewId(req: http.IncomingMessage): number | null {
+  const referer = req.headers['referer'];
+  if (typeof referer !== 'string') return null;
+  try {
+    const r = new URL(referer);
+    const m = r.pathname.match(/^\/_p\/(\d+)/);
+    return m ? Number(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function proxyHandle(req: http.IncomingMessage, res: http.ServerResponse): void {
+  let reqPath = req.url ?? '/';
+  if (reqPath.startsWith(PROXY_PREFIX + '/')) {
+    reqPath = reqPath.slice(PROXY_PREFIX.length) || '/';
+  } else if (reqPath === PROXY_PREFIX) {
+    reqPath = '/';
+  }
+
+  const uid = getSessionUserId(req);
+  if (uid != null) {
+    proxyForUser(req, res, uid, reqPath, false);
+    return;
+  }
+
+  const refId = getRefererPreviewId(req);
+  if (refId != null) {
+    proxyForUser(req, res, refId, reqPath, true);
+    return;
+  }
+
+  const cookieId = getCookiePreviewId(req);
+  if (cookieId != null) {
+    proxyForUser(req, res, cookieId, reqPath, true);
+    return;
+  }
+
+  res.writeHead(403, { 'Content-Type': 'text/plain' });
+  res.end('Not authenticated');
+}
+
 http
   .createServer(async (req, res) => {
     const reqPath = (req.url ?? '/').split('?')[0] ?? '/';
@@ -203,6 +286,14 @@ http
       return;
     }
 
+    const previewMatch = reqPath.match(PREVIEW_RE);
+    if (previewMatch) {
+      const id = Number(previewMatch[1]);
+      const subpath = previewMatch[2] || '/';
+      proxyForUser(req, res, id, subpath, true);
+      return;
+    }
+
     if (reqPath === '/admin' || reqPath === '/admin/') {
       const uid = getSessionUserId(req);
       const user = uid != null ? getUserById(uid) : null;
@@ -220,9 +311,7 @@ http
         res.end('User not found');
         return;
       }
-      const uid = getSessionUserId(req);
-      const file = uid === id ? 'user.html' : 'user-login.html';
-      serveFile(res, path.join(PUBLIC_DIR, file));
+      serveFile(res, path.join(PUBLIC_DIR, 'user.html'));
       return;
     }
 
