@@ -1,0 +1,111 @@
+:host {
+  display: block;
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.admin__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+
+  h1 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+
+  button {
+    padding: 0.4rem 0.75rem;
+    border: 1px solid #ccc;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+  }
+}
+
+.admin__error {
+  background: #fde8e8;
+  color: #c0392b;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.admin__section {
+  margin-bottom: 2.5rem;
+
+  h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.1rem;
+  }
+}
+
+.admin__form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 400px;
+
+  input,
+  textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+
+  button {
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-radius: 6px;
+    background: #2a6df4;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    justify-self: start;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.admin__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.admin__table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+  }
+
+  th {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+  }
+
+  button {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #c0392b;
+    color: #c0392b;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+  }
+}

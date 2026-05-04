@@ -1,1 +1,67 @@
-<p>admin works!</p>
+<div class="admin">
+  <header class="admin__header">
+    <button type="button" (click)="back()">← Dashboard</button>
+    <h1>Users</h1>
+  </header>
+
+  @if (error(); as msg) {
+    <div class="admin__error">{{ msg }}</div>
+  }
+
+  <section class="admin__section">
+    <h2>Create user</h2>
+    <form class="admin__form" (ngSubmit)="create()" #f="ngForm">
+      <input name="name" placeholder="Name" [(ngModel)]="newName" required />
+      <input
+        name="password"
+        type="password"
+        placeholder="Password"
+        [(ngModel)]="newPassword"
+        required
+      />
+      <textarea
+        name="apiKeys"
+        placeholder="API keys (one per line)"
+        rows="3"
+        [(ngModel)]="newApiKeys"
+      ></textarea>
+      <label class="admin__checkbox">
+        <input type="checkbox" name="isAdmin" [(ngModel)]="newIsAdmin" />
+        Admin
+      </label>
+      <button type="submit" [disabled]="!f.valid">Create</button>
+    </form>
+  </section>
+
+  <section class="admin__section">
+    <h2>Existing users</h2>
+    <table class="admin__table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Admin</th>
+          <th>API keys</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (u of users(); track u.id) {
+          <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.name }}</td>
+            <td>{{ u.isAdmin ? 'yes' : 'no' }}</td>
+            <td>{{ u.apiKeys.length }}</td>
+            <td>
+              <button type="button" (click)="remove(u.id)">delete</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5">No users</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+</div>

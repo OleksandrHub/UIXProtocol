@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 
+import { handleApi } from './api';
 import { environment } from './environments/environment';
 
 const rawTarget = environment.target.trim();
@@ -16,12 +17,14 @@ function rewriteUrls(text: string): string {
 }
 
 http
-  .createServer((req, res) => {
+  .createServer(async (req, res) => {
     if (req.url === '/favicon.ico') {
       res.writeHead(204);
       res.end();
       return;
     }
+
+    if (await handleApi(req, res)) return;
 
     let reqPath = req.url ?? '/';
 

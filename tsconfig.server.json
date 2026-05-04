@@ -9,5 +9,5 @@
     "outDir": "./out-tsc/server",
     "rootDir": "."
   },
-  "include": ["server.ts", "environments/**/*.ts"]
+  "include": ["server.ts", "api.ts", "db.ts", "environments/**/*.ts"]
 }
