@@ -2,8 +2,6 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-import { environment } from '../../../../environments/environment';
-
 export interface User {
   id: number;
   name: string;
@@ -19,7 +17,7 @@ export interface CreateUserInput {
 }
 
 const STORAGE_KEY = 'uix:auth:user';
-const API_BASE = `http://localhost:${environment.port}/api`;
+const API_BASE = '/api';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {

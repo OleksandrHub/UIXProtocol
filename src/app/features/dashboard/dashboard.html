@@ -5,4 +5,9 @@
   }
   <button type="button" (click)="logout()">Logout</button>
 </header>
-<iframe class="dashboard__frame" [src]="proxyUrl" frameborder="0"></iframe>
+<iframe
+  #frame
+  class="dashboard__frame"
+  [src]="proxyUrl"
+  frameborder="0"
+></iframe>

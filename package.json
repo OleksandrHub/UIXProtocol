@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "concurrently -n ng,proxy -c green,cyan \"ng serve\" \"npm:server\"",
+    "start": "concurrently -n ng,proxy -c green,cyan \"ng serve --host 0.0.0.0\" \"npm:server\"",
     "server": "tsx server.ts",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",

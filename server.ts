@@ -92,7 +92,14 @@ http
 
         delete headers['x-frame-options'];
         delete headers['content-security-policy'];
+        delete headers['content-security-policy-report-only'];
         delete headers['strict-transport-security'];
+        delete headers['feature-policy'];
+
+        headers['permissions-policy'] = environment.iframePermissions
+          .map((p) => `${p}=*`)
+          .join(', ');
+
         headers['content-length'] = buffer.length;
 
         res.writeHead(proxyRes.statusCode ?? 502, headers);
