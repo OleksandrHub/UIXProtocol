@@ -8,13 +8,18 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="page-user">
-  <header class="bar">
+  <div class="bar-trigger" id="barTrigger" hidden></div>
+  <header class="bar" id="bar" hidden>
     <span class="user" id="userName">…</span>
     <button type="button" id="settingsBtn">Налаштування</button>
     <a id="adminLink" href="/admin" hidden>Адмін</a>
     <button type="button" id="logoutBtn">Вихід</button>
   </header>
   <iframe id="frame" class="frame" frameborder="0"></iframe>
+
+  <form class="modal-quicklogin" id="loginForm" hidden autocomplete="off">
+    <input id="loginPassword" type="password" autocomplete="current-password" required>
+  </form>
 
   <div class="modal" id="settings" hidden>
     <div class="modal__card">
@@ -26,7 +31,7 @@
         <textarea id="keysInput" rows="4"></textarea>
       </label>
       <label>Новий пароль (порожньо — не змінювати)
-        <input id="passInput" type="password" placeholder="">
+        <input id="passInput" type="password">
       </label>
       <div class="error" id="settingsError"></div>
       <div class="modal__actions">
