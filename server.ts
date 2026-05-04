@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 
+import { handleApi } from './api';
 import { environment } from './environments/environment';
 
 const rawTarget = environment.target.trim();
@@ -16,12 +17,14 @@ function rewriteUrls(text: string): string {
 }
 
 http
-  .createServer((req, res) => {
+  .createServer(async (req, res) => {
     if (req.url === '/favicon.ico') {
       res.writeHead(204);
       res.end();
       return;
     }
+
+    if (await handleApi(req, res)) return;
 
     let reqPath = req.url ?? '/';
 
@@ -89,7 +92,14 @@ http
 
         delete headers['x-frame-options'];
         delete headers['content-security-policy'];
+        delete headers['content-security-policy-report-only'];
         delete headers['strict-transport-security'];
+        delete headers['feature-policy'];
+
+        headers['permissions-policy'] = environment.iframePermissions
+          .map((p) => `${p}=*`)
+          .join(', ');
+
         headers['content-length'] = buffer.length;
 
         res.writeHead(proxyRes.statusCode ?? 502, headers);

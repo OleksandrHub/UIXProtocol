@@ -1,1 +1,13 @@
-<iframe class="dashboard__frame" [src]="proxyUrl" frameborder="0"></iframe>
+<header class="dashboard__bar">
+  <span class="dashboard__user">{{ name() }}</span>
+  @if (isAdmin()) {
+    <a [routerLink]="['/admin']">Admin</a>
+  }
+  <button type="button" (click)="logout()">Logout</button>
+</header>
+<iframe
+  #frame
+  class="dashboard__frame"
+  [src]="proxyUrl"
+  frameborder="0"
+></iframe>
