@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Вхід</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-login">
+  <form class="card" id="form">
+    <h1 id="title">Вхід</h1>
+    <input id="password" type="password" placeholder="Пароль" autocomplete="current-password" required autofocus>
+    <div class="error" id="error"></div>
+    <button type="submit" id="submit">Увійти</button>
+    <a class="link" href="/">Інший користувач?</a>
+  </form>
+  <script type="module" src="/static/user-login.js"></script>
+</body>
+</html>

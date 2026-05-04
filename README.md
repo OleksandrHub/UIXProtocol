@@ -1,59 +1,56 @@
-# Uixprotocol
+# UIXProtocol
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.0.5.
+Лёгкий проксі з мульти-користувацькою auth. Один Node-процес, один порт.
 
-## Development server
+## Архітектура
 
-To start a local development server, run:
+- `server.ts` — HTTP-сервер на одному порту (за замовчуванням 3000):
+  - `/` — повна форма входу (ім'я + пароль), редирект на `/<id>/`
+  - `/<id>/` — кабінет користувача (іфрейм + меню) або форма пароля
+  - `/admin` — панель адміна (форма ім'я+пароль для будь-якого адміна)
+  - `/api/*` — REST API
+  - `/static/*` — статика (CSS/JS)
+  - `/_p/*` — точка входу проксі для іфрейма
+  - решта — fallback-проксі (для абсолютних шляхів усередині проксійованого HTML)
+- `db.ts` — SQLite (`better-sqlite3`) + scrypt (`node:crypto`)
+- `session.ts` — in-memory сесії, HttpOnly cookie
+- `api.ts` — REST роутинг
+- `public/` — HTML/CSS/JS клієнт (без фреймворків)
+
+Кожен користувач має поле `target_url` — сайт, який транслює проксі. Юзер може його змінити з меню.
+
+## Запуск
 
 ```bash
+# Встановити залежності (ОДИН раз)
+npm install
+
+# Створити першого адміна
+npm run create-admin -- admin "ваш_пароль" "https://example.com"
+# або інтерактивно:
+npm run create-admin
+
+# Розробка (з гарячою TS)
+npm run dev
+
+# Прод (компіляція + чистий node — мінімум RAM)
+npm run build
 npm start
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Відкрити: `http://localhost:3000/admin` (увійти як admin), створити користувачів. Потім кожен заходить на `http://localhost:3000/<його_id>/` або через `http://localhost:3000/`.
 
-## Code scaffolding
+## Налаштування
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+`environments/environment.ts`:
+- `port` — порт сервера
+- `defaultTarget` — URL за замовчуванням, якщо в юзера порожній `target_url`
+- `sessionTtlMs` — час життя сесії (мс)
+- `iframePermissions` — дозволи для іфрейма (camera, microphone, тощо)
 
-```bash
-ng generate component component-name
-```
+## Залежності
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+- `better-sqlite3` — рантайм
+- `tsx`, `typescript`, `@types/*` — тільки для dev/build
 
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+bcrypt і Angular повністю прибрані.

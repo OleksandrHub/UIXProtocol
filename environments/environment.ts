@@ -1,7 +1,8 @@
 export const environment = {
   production: false,
-  target: 'https://dl.tntu.edu.ua/login.php',
+  defaultTarget: 'https://dl.tntu.edu.ua',
   port: 3000,
+  sessionTtlMs: 60 * 60 * 1000,
   iframePermissions: [
     'camera',
     'microphone',
