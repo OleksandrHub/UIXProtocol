@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="/favicon.ico">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body class="page-user">
   <div class="bar-trigger" id="barTrigger" hidden></div>
@@ -16,6 +17,12 @@
     <button type="button" id="logoutBtn">Вихід</button>
   </header>
   <iframe id="frame" class="frame" frameborder="0"></iframe>
+
+  <div class="gemini-panel" id="geminiPanel" hidden>
+    <button type="button" id="screenshotBtn" title="Зробити скріншот і надіслати до Gemini">Скрін</button>
+  </div>
+
+  <div class="gemini-result" id="geminiResult" hidden></div>
 
   <form class="modal-quicklogin" id="loginForm" hidden autocomplete="off">
     <input id="loginPassword" type="password" autocomplete="current-password" required>

@@ -17,6 +17,7 @@
     "api.ts",
     "db.ts",
     "session.ts",
+    "gemini.ts",
     "create-admin.ts",
     "environments/**/*.ts"
   ]
