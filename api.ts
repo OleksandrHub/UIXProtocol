@@ -12,14 +12,15 @@ import {
 } from './db';
 import { clearSession, getSessionUserId, setSession } from './session';
 import { environment } from './environments/environment';
+import { solveWithGemini } from './gemini';
 
-function readJson<T>(req: IncomingMessage): Promise<T> {
+function readJson<T>(req: IncomingMessage, maxBytes = 1_000_000): Promise<T> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
     req.on('data', (c: Buffer) => {
       total += c.length;
-      if (total > 1_000_000) {
+      if (total > maxBytes) {
         req.destroy();
         reject(new Error('payload too large'));
         return;
@@ -191,6 +192,31 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         return true;
       }
       sendJson(res, 200, updateUser(me.id, { password: body.password }));
+      return true;
+    }
+
+    if (path === '/api/gemini/solve' && req.method === 'POST') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const body = await readJson<{ imageBase64?: string }>(req, 15_000_000);
+      if (!body.imageBase64) {
+        sendJson(res, 400, { error: 'imageBase64 required' });
+        return true;
+      }
+      const keys = (meUser.apiKeys ?? []).filter(Boolean);
+      if (!keys.length) {
+        sendJson(res, 400, { error: 'no API keys configured' });
+        return true;
+      }
+      try {
+        const answer = await solveWithGemini(keys, body.imageBase64);
+        sendJson(res, 200, { answer });
+      } catch (e) {
+        sendJson(res, 502, { error: (e as Error).message });
+      }
       return true;
     }
 
