@@ -60,10 +60,10 @@ button { font: inherit; cursor: pointer; }
   font-size: 1rem;
   text-align: center;
   letter-spacing: .15em;
-  background: rgba(0,0,0,.55);
+  background: rgba(0,0,0,.05);
   border: 1px solid rgba(255,255,255,.55);
   border-radius: 8px;
-  color: rgba(255,255,255,.85);
+  color: rgba(255,255,255,.55);
   outline: none;
   caret-color: rgba(255,255,255,.85);
   transition: border-color .15s, color .15s;
@@ -71,11 +71,11 @@ button { font: inherit; cursor: pointer; }
 .modal-quicklogin input::placeholder { color: rgba(255,255,255,.35); }
 .modal-quicklogin input:focus {
   border-color: rgba(255,255,255,.95);
-  color: rgba(255,255,255,.95);
+  color: rgba(255,255,255,.45);
 }
 .modal-quicklogin input.wrong {
-  border-color: rgba(255,90,90,.9);
-  color: rgba(255,90,90,.95);
+  border-color: rgba(255,90,90,.4);
+  color: rgba(255,90,90,.45);
 }
 .modal-quicklogin input.shake { animation: shake .3s; }
 @keyframes shake {
