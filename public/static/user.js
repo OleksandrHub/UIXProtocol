@@ -19,16 +19,48 @@ async function enterAuthed(me, { fromLogin }) {
 
   const bar = document.getElementById('bar');
   bar.hidden = false;
-  document.getElementById('title').textContent = me.name;
   document.getElementById('userName').textContent = me.name;
   if (me.isAdmin) document.getElementById('adminLink').hidden = false;
 
+  const barTrigger = document.getElementById('barTrigger');
   const toggleBar = () => bar.classList.toggle('show');
+
+  if (barTrigger) {
+    barTrigger.hidden = false;
+    barTrigger.addEventListener('click', toggleBar);
+  }
 
   document.getElementById('geminiPanel').hidden = false;
   const { triggerGemini, toggleResult } = initGemini();
 
   installShortcuts({ frame, triggerGemini, toggleResult, toggleBar });
+
+  const favicon = document.getElementById('favicon');
+  const syncMetaFromFrame = () => {
+    try {
+      const fdoc = frame.contentDocument;
+      if (!fdoc) return;
+      const t = fdoc.title && fdoc.title.trim();
+      if (t) document.title = t;
+      else document.title = me.name;
+      if (favicon) {
+        const link = fdoc.querySelector('link[rel~="icon"], link[rel="shortcut icon"]');
+        if (link && link.href) {
+          try {
+            const u = new URL(link.href, location.origin);
+            if (u.origin === location.origin) {
+              favicon.href = '/_p' + u.pathname + u.search;
+            } else {
+              favicon.href = u.href;
+            }
+          } catch {}
+        } else {
+          favicon.href = '/_p/favicon.ico';
+        }
+      }
+    } catch {}
+  };
+  frame.addEventListener('load', syncMetaFromFrame);
 
   const cfg = await api('/config');
   frame.setAttribute('allow', cfg.iframePermissions.map((p) => `${p} *`).join('; '));
@@ -92,9 +124,8 @@ function initGemini() {
   let busy = false;
   let hideTimer = null;
 
-  const showResult = (text, isError = false) => {
+  const showResult = (text) => {
     resultEl.textContent = text;
-    resultEl.classList.toggle('gemini-result--error', isError);
     resultEl.hidden = false;
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => { resultEl.hidden = true; }, 12000);
@@ -187,7 +218,7 @@ function initGemini() {
       });
       showResult(answer || '—');
     } catch (e) {
-      showResult('Помилка: ' + (e?.message || e), true);
+      showResult('Помилка: ' + (e?.message || e));
     } finally {
       busy = false;
       btn.disabled = false;
@@ -234,6 +265,7 @@ function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar }) {
   const WHEEL_COOLDOWN = 700;
   const handleWheel = (e) => {
     if (!e.deltaY) return;
+    if (!e.ctrlKey && !e.altKey) return;
     e.preventDefault();
     e.stopPropagation();
     const now = Date.now();
