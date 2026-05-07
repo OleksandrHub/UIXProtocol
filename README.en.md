@@ -172,14 +172,14 @@ For a cross-origin iframe target, `frame.contentDocument` will be `null` and onl
 
 ## Mouse wheel
 
-The same `installShortcuts()` listens for `wheel` (`passive: false`, capture) and mirrors into the iframe. Cooldown is **700 ms** between actions so a long scroll doesn't spam requests.
+The same `installShortcuts()` listens for `wheel` (`passive: false`, capture) and mirrors into the iframe. It **only fires when `Ctrl` or `Alt` is held** — a plain wheel still scrolls the page normally. Cooldown is **700 ms** between actions so a long scroll doesn't spam requests.
 
 | Gesture | Action |
 | --- | --- |
-| Wheel up (`deltaY < 0`) | `triggerGemini()` — fire Gemini |
-| Wheel down (`deltaY > 0`) | `toggleResult()` — toggle the answer |
+| `Ctrl`/`Alt` + wheel up (`deltaY < 0`) | `triggerGemini()` — fire Gemini |
+| `Ctrl`/`Alt` + wheel down (`deltaY > 0`) | `toggleResult()` — toggle the answer |
 
-The `wheel` event blocks the default scroll (`preventDefault`) — by design: the UX is tuned for a fast "screenshot → answer" flow.
+`preventDefault` is only called when the modifier is pressed; otherwise scroll passes through to the page/iframe untouched. `Ctrl+wheel` is the default browser zoom — in this dashboard it's repurposed to trigger Gemini.
 
 ## Menu and settings
 
