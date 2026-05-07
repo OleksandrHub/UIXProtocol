@@ -14,18 +14,17 @@ if (me && me.id === id) {
 
 async function initAuthed(me) {
   const bar = document.getElementById('bar');
-  const barTrigger = document.getElementById('barTrigger');
   bar.hidden = false;
-  barTrigger.hidden = false;
   document.getElementById('title').textContent = me.name;
   document.getElementById('userName').textContent = me.name;
   if (me.isAdmin) document.getElementById('adminLink').hidden = false;
 
-  barTrigger.addEventListener('mouseenter', () => bar.classList.add('show'));
-  bar.addEventListener('mouseleave', () => bar.classList.remove('show'));
+  const toggleBar = () => bar.classList.toggle('show');
 
   document.getElementById('geminiPanel').hidden = false;
-  initGemini();
+  const { triggerGemini, toggleResult } = initGemini();
+
+  installShortcuts({ frame, triggerGemini, toggleResult, toggleBar });
 
   const cfg = await api('/config');
   frame.setAttribute('allow', cfg.iframePermissions.map((p) => `${p} *`).join('; '));
@@ -170,7 +169,7 @@ function initGemini() {
       );
     });
 
-  btn.addEventListener('click', async () => {
+  const triggerGemini = async () => {
     if (busy) return;
     busy = true;
     btn.disabled = true;
@@ -189,7 +188,68 @@ function initGemini() {
       busy = false;
       btn.disabled = false;
     }
-  });
+  };
+
+  const toggleResult = () => {
+    if (!resultEl.textContent.trim()) return;
+    if (resultEl.hidden) {
+      resultEl.hidden = false;
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => { resultEl.hidden = true; }, 12000);
+    } else {
+      clearTimeout(hideTimer);
+      resultEl.hidden = true;
+    }
+  };
+
+  btn.addEventListener('click', triggerGemini);
+
+  return { triggerGemini, toggleResult };
+}
+
+function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar }) {
+  const isTextInput = (el) => {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+  };
+
+  const handleKey = (e) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey) return;
+    if (isTextInput(e.target)) return;
+    const k = e.key.toLowerCase();
+    if (k !== 'g' && k !== 'h' && k !== 'm') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (k === 'g') triggerGemini();
+    else if (k === 'h') toggleResult();
+    else if (k === 'm') toggleBar();
+  };
+
+  let lastWheel = 0;
+  const WHEEL_COOLDOWN = 700;
+  const handleWheel = (e) => {
+    if (!e.deltaY) return;
+    const now = Date.now();
+    if (now - lastWheel < WHEEL_COOLDOWN) return;
+    lastWheel = now;
+    if (e.deltaY < 0) triggerGemini();
+    else toggleResult();
+  };
+
+  window.addEventListener('keydown', handleKey, true);
+  window.addEventListener('wheel', handleWheel, { passive: true });
+
+  const attachToFrame = () => {
+    try {
+      const fdoc = frame.contentDocument;
+      if (!fdoc) return;
+      fdoc.addEventListener('keydown', handleKey, true);
+      fdoc.addEventListener('wheel', handleWheel, { passive: true });
+    } catch {}
+  };
+  frame.addEventListener('load', attachToFrame);
+  attachToFrame();
 }
 
 async function initLogin() {

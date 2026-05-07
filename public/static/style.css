@@ -94,13 +94,6 @@ button { font: inherit; cursor: pointer; }
   display: block;
 }
 
-.bar-trigger {
-  position: fixed; top: 0; left: 0; right: 0;
-  height: 8px;
-  z-index: 70;
-}
-.bar-trigger[hidden] { display: none; }
-
 .bar {
   position: fixed; top: 0; left: 0; right: 0;
   display: flex; align-items: center; gap: .75rem;
@@ -123,8 +116,8 @@ button { font: inherit; cursor: pointer; }
 
 .gemini-panel {
   position: fixed;
-  right: 1rem;
-  bottom: 1rem;
+  left: 1rem;
+  top: 1rem;
   z-index: 95;
   display: flex;
   gap: .5rem;
