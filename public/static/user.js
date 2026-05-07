@@ -7,12 +7,16 @@ const frame = document.getElementById('frame');
 const me = await api('/me').catch(() => null);
 
 if (me && me.id === id) {
-  await initAuthed(me);
+  await enterAuthed(me, { fromLogin: false });
 } else {
   await initLogin();
 }
 
-async function initAuthed(me) {
+async function enterAuthed(me, { fromLogin }) {
+  document.body.classList.remove('locked');
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) loginForm.hidden = true;
+
   const bar = document.getElementById('bar');
   bar.hidden = false;
   document.getElementById('title').textContent = me.name;
@@ -29,7 +33,7 @@ async function initAuthed(me) {
   const cfg = await api('/config');
   frame.setAttribute('allow', cfg.iframePermissions.map((p) => `${p} *`).join('; '));
   const proxyBase = location.origin + cfg.proxyPath;
-  frame.src = proxyBase;
+  if (!fromLogin) frame.src = proxyBase;
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     await api('/logout', { method: 'POST' });
@@ -259,24 +263,45 @@ async function initLogin() {
   const form = document.getElementById('loginForm');
   form.hidden = false;
   const pass = document.getElementById('loginPassword');
+  pass.maxLength = 1;
   pass.focus();
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  let busy = false;
+
+  const showWrong = () => {
     pass.classList.remove('shake', 'wrong');
+    void pass.offsetWidth;
+    pass.classList.add('wrong', 'shake');
+    pass.value = '';
+    pass.focus();
+  };
+
+  const tryLogin = async (char) => {
+    if (busy) return;
+    busy = true;
     pass.disabled = true;
     try {
-      await api(`/login/${id}`, {
+      const user = await api(`/login/${id}/quick`, {
         method: 'POST',
-        body: JSON.stringify({ password: pass.value }),
+        body: JSON.stringify({ char }),
       });
-      location.reload();
+      pass.value = '';
+      await enterAuthed(user, { fromLogin: true });
     } catch {
       pass.disabled = false;
-      pass.classList.add('wrong');
-      void pass.offsetWidth;
-      pass.classList.add('shake');
-      pass.select();
+      showWrong();
+    } finally {
+      busy = false;
     }
+  };
+
+  pass.addEventListener('input', () => {
+    pass.classList.remove('shake', 'wrong');
+    if (pass.value.length === 1) tryLogin(pass.value);
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (pass.value.length === 1) tryLogin(pass.value);
   });
 }

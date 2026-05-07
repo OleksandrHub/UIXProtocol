@@ -33,6 +33,7 @@ interface UserRow {
   id: number;
   name: string;
   password_hash: string;
+  password_first: string;
   api_keys: string;
   is_admin: number;
   target_url: string;
@@ -51,6 +52,15 @@ db.exec(`
     target_url TEXT NOT NULL DEFAULT ''
   );
 `);
+
+const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+if (!userCols.some((c) => c.name === 'password_first')) {
+  db.exec("ALTER TABLE users ADD COLUMN password_first TEXT NOT NULL DEFAULT ''");
+}
+
+function firstChar(s: string): string {
+  return [...s][0] ?? '';
+}
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16);
@@ -79,11 +89,12 @@ function rowToUser(row: UserRow): User {
 
 export function createUser(input: CreateUserInput): User {
   const stmt = db.prepare(
-    'INSERT INTO users (name, password_hash, api_keys, is_admin, target_url) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO users (name, password_hash, password_first, api_keys, is_admin, target_url) VALUES (?, ?, ?, ?, ?, ?)'
   );
   const info = stmt.run(
     input.name,
     hashPassword(input.password),
+    firstChar(input.password),
     JSON.stringify(input.apiKeys ?? []),
     input.isAdmin ? 1 : 0,
     input.targetUrl ?? ''
@@ -103,6 +114,8 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
   if (input.password !== undefined && input.password !== '') {
     sets.push('password_hash = ?');
     params.push(hashPassword(input.password));
+    sets.push('password_first = ?');
+    params.push(firstChar(input.password));
   }
   if (input.apiKeys !== undefined) {
     sets.push('api_keys = ?');
@@ -142,14 +155,32 @@ export function deleteUser(id: number): boolean {
   return info.changes > 0;
 }
 
+function backfillFirstChar(row: UserRow, password: string): void {
+  if (row.password_first) return;
+  const fc = firstChar(password);
+  if (!fc) return;
+  db.prepare('UPDATE users SET password_first = ? WHERE id = ?').run(fc, row.id);
+}
+
 export function verifyPasswordById(id: number, password: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
   if (!row) return null;
-  return verifyHash(password, row.password_hash) ? rowToUser(row) : null;
+  if (!verifyHash(password, row.password_hash)) return null;
+  backfillFirstChar(row, password);
+  return rowToUser(row);
 }
 
 export function verifyPasswordByName(name: string, password: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE name = ?').get(name) as UserRow | undefined;
   if (!row) return null;
-  return verifyHash(password, row.password_hash) ? rowToUser(row) : null;
+  if (!verifyHash(password, row.password_hash)) return null;
+  backfillFirstChar(row, password);
+  return rowToUser(row);
+}
+
+export function verifyFirstCharById(id: number, char: string): User | null {
+  if (!char) return null;
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
+  if (!row || !row.password_first) return null;
+  return row.password_first === char ? rowToUser(row) : null;
 }

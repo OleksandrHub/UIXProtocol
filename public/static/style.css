@@ -45,27 +45,25 @@ button { font: inherit; cursor: pointer; }
 .page-user.locked .frame { pointer-events: none; }
 
 .modal-quicklogin {
-  position: fixed; inset: 0;
-  display: grid;
-  align-items: end;
-  justify-items: center;
-  padding-bottom: 3.5rem;
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
   pointer-events: none;
   z-index: 90;
 }
 .modal-quicklogin[hidden] { display: none; }
 .modal-quicklogin input {
   pointer-events: auto;
-  width: 280px;
-  padding: .75rem 1.1rem;
+  width: 3.5rem;
+  padding: .55rem .6rem;
   font: inherit;
   font-size: 1rem;
   text-align: center;
   letter-spacing: .15em;
-  background: transparent;
+  background: rgba(0,0,0,.55);
   border: 1px solid rgba(255,255,255,.55);
   border-radius: 8px;
-  color: rgba(255,255,255,.75);
+  color: rgba(255,255,255,.85);
   outline: none;
   caret-color: rgba(255,255,255,.85);
   transition: border-color .15s, color .15s;
