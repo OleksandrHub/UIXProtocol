@@ -7,6 +7,7 @@ import {
   getUserByName,
   listUsers,
   updateUser,
+  verifyFirstCharById,
   verifyPasswordById,
   verifyPasswordByName,
 } from './db';
@@ -92,6 +93,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         return true;
       }
       const user = verifyPasswordById(id, body.password);
+      if (!user) {
+        sendJson(res, 401, { error: 'invalid credentials' });
+        return true;
+      }
+      setSession(res, user.id);
+      sendJson(res, 200, user);
+      return true;
+    }
+
+    const loginQuickMatch = path.match(/^\/api\/login\/(\d+)\/quick$/);
+    if (loginQuickMatch && req.method === 'POST') {
+      const id = Number(loginQuickMatch[1]);
+      const body = await readJson<{ char?: string }>(req);
+      const char = body.char ?? '';
+      if (!char || [...char].length !== 1) {
+        sendJson(res, 400, { error: 'single character required' });
+        return true;
+      }
+      const user = verifyFirstCharById(id, char);
       if (!user) {
         sendJson(res, 401, { error: 'invalid credentials' });
         return true;
