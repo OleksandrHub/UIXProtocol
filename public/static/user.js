@@ -35,32 +35,68 @@ async function enterAuthed(me, { fromLogin }) {
 
   installShortcuts({ frame, triggerGemini, toggleResult, toggleBar });
 
-  const favicon = document.getElementById('favicon');
+  let faviconLink = document.getElementById('favicon');
+  const setFavicon = (href) => {
+    const busted = href + (href.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    const fresh = document.createElement('link');
+    fresh.rel = 'icon';
+    fresh.id = 'favicon';
+    fresh.href = busted;
+    if (faviconLink) faviconLink.replaceWith(fresh);
+    else document.head.appendChild(fresh);
+    faviconLink = fresh;
+  };
+  let lastTitle = '';
+  let lastFavicon = '';
   const syncMetaFromFrame = () => {
     try {
       const fdoc = frame.contentDocument;
       if (!fdoc) return;
-      const t = fdoc.title && fdoc.title.trim();
-      if (t) document.title = t;
-      else document.title = me.name;
-      if (favicon) {
-        const link = fdoc.querySelector('link[rel~="icon"], link[rel="shortcut icon"]');
-        if (link && link.href) {
-          try {
-            const u = new URL(link.href, location.origin);
-            if (u.origin === location.origin) {
-              favicon.href = '/_p' + u.pathname + u.search;
-            } else {
-              favicon.href = u.href;
-            }
-          } catch {}
-        } else {
-          favicon.href = '/_p/favicon.ico';
-        }
+      const t = (fdoc.title || '').trim();
+      const nextTitle = t || me.name;
+      if (nextTitle !== lastTitle) {
+        document.title = nextTitle;
+        lastTitle = nextTitle;
+      }
+      let nextHref = '/_p/favicon.ico';
+      const link = fdoc.querySelector('link[rel~="icon"], link[rel="shortcut icon"]');
+      if (link && link.href) {
+        try {
+          const u = new URL(link.href, location.origin);
+          nextHref = u.origin === location.origin
+            ? '/_p' + u.pathname + u.search
+            : u.href;
+        } catch {}
+      }
+      if (nextHref !== lastFavicon) {
+        setFavicon(nextHref);
+        lastFavicon = nextHref;
       }
     } catch {}
   };
-  frame.addEventListener('load', syncMetaFromFrame);
+  let metaObserver = null;
+  const observeFrameHead = () => {
+    if (metaObserver) {
+      metaObserver.disconnect();
+      metaObserver = null;
+    }
+    try {
+      const fdoc = frame.contentDocument;
+      if (!fdoc || !fdoc.head) return;
+      metaObserver = new MutationObserver(syncMetaFromFrame);
+      metaObserver.observe(fdoc.head, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    } catch {}
+  };
+  frame.addEventListener('load', () => {
+    syncMetaFromFrame();
+    observeFrameHead();
+  });
+  syncMetaFromFrame();
+  observeFrameHead();
 
   const cfg = await api('/config');
   frame.setAttribute('allow', cfg.iframePermissions.map((p) => `${p} *`).join('; '));

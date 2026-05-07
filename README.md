@@ -27,7 +27,10 @@ npm run dev
 - Адмін-панель: CRUD користувачів, видача прав адміна, керування API-ключами
 - Особистий кабінет: змінити цільовий URL, пароль, додати/видалити Gemini API-ключі
 - Інтеграція з Google Gemini: скрін iframe → коротка відповідь на тест
-- Гарячі клавіші `Alt+G/H/M` і керування колесом мишки (без додаткових тулбарів)
+- Гарячі клавіші `Alt+G/H/M` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
+- Невидимий клік-зон 44×44 у правому верхньому куті для відкриття меню
+- Назва вкладки та favicon автоматично підхоплюються з цільового сайту
+- Адаптивна верстка для мобільних (top-bar, адмін-панель, таблиця користувачів)
 - Ізольований "preview"-режим для неавтентифікованих відвідувачів за прямим посиланням `/_p/<id>/...`
 
 ## Архітектура
@@ -135,8 +138,9 @@ target_url    TEXT NOT NULL DEFAULT ''
 
 `enterAuthed(me, { fromLogin })`:
 - Показує top-bar з ім'ям, кнопками "Налаштування", "Адмін" (для адмінів), "Вихід".
+- Реєструє `barTrigger` (невидимий клік-зон 44×44 у правому верхньому куті) → клік toggle меню.
 - Запит `GET /api/config` → ставить `allow="..."` на iframe згідно `iframePermissions` і виставляє `frame.src` в `proxyBase` (`/_p/`), якщо це не редирект після свіжого логіну (`fromLogin=true` — iframe уже показує таргет).
-- Запускає панель Gemini (кнопка "Скрін") і встановлює гарячі клавіші / колесо.
+- Запускає панель Gemini, встановлює гарячі клавіші / колесо, навішує `frame.addEventListener('load', syncMetaFromFrame)` для синхронізації title/favicon.
 - Налаштування зберігаються трьома окремими PUT-запитами (`/me/url`, `/me/api-keys`, `/me/password`) — лише для змінених полів.
 
 `initLogin()`:
@@ -160,7 +164,7 @@ target_url    TEXT NOT NULL DEFAULT ''
 
 ## Гарячі клавіші
 
-Слухач навішується через `installShortcuts()` у [public/static/user.js](public/static/user.js#L214) на `window` і **дублюється** в `iframe.contentDocument` (через `attachToFrame` після `load`) — щоб клавіші ловилися й коли фокус усередині таргета. Спрацьовує лише на `Alt + клавіша` (без `Ctrl`/`Meta`) і **ігнорується** в текстових полях (`INPUT`, `TEXTAREA`, `contentEditable`).
+Слухач навішується через `installShortcuts()` у [public/static/user.js](public/static/user.js#L245) на `window` і **дублюється** в `iframe.contentDocument` (через `attachToFrame` після `load`) — щоб клавіші ловилися й коли фокус усередині таргета. Спрацьовує лише на `Alt + клавіша` (без `Ctrl`/`Meta`) і **ігнорується** в текстових полях (`INPUT`, `TEXTAREA`, `contentEditable`).
 
 | Клавіша | Дія | Реалізація |
 | --- | --- | --- |
@@ -183,21 +187,42 @@ target_url    TEXT NOT NULL DEFAULT ''
 
 ## Меню та налаштування
 
-Top-bar (`<header id="bar">`) за замовчуванням схований; з'являється після успішного логіну. Кнопки:
+### Тригер меню
 
+`<div id="barTrigger" class="bar-trigger">` — невидимий клік-зон **44×44 px** у правому верхньому куті (`position: fixed; top: 0; right: 0; background: transparent; z-index: 90`). Той самий клік відкриває й закриває меню (як `Alt+M`). У `.bar` зарезервовано `padding-right: 60px` (44 px тригера + 16 px буфер), щоб кнопка «Вихід» не перекривалася.
+
+### Top-bar
+
+`<header id="bar">` за замовчуванням схований; з'являється після успішного логіну. Стан показу — клас `.show`, перехід через `transform: translateY(-100%)` ↔ `translateY(0)` із `transition .2s`.
+
+Кнопки:
 - **Ім'я користувача** — просто текст.
-- **Налаштування** — відкриває модалку з трьома полями:
+- **Налаштування** — модалка з трьома полями:
   - URL сайту → `PUT /api/me/url` → після збереження iframe перезавантажується з нового таргета
   - API ключі (по одному в рядок) → `PUT /api/me/api-keys`
   - Новий пароль (порожньо — не змінювати) → `PUT /api/me/password`
-- **Адмін** — посилання на `/admin` (видно лише для `isAdmin=true`).
-- **Вихід** — `POST /api/logout`, потім редирект на `/`.
+- **Адмін** — посилання на `/admin` (тільки для `isAdmin=true`).
+- **Вихід** — `POST /api/logout`, редирект на `/`.
 
-Окремо в правому-нижньому куті — панель Gemini з кнопкою "Скрін" (та сама дія, що й `Alt+G`). Результат — плаваючий блок, який автоматично ховається через **12 секунд** після появи.
+### Панель Gemini
+
+Кнопка-«S» (`#screenshotBtn`) — у **верхньому лівому** куті (`top: 1rem; left: 1rem`). Стиль: `background: transparent`, напівпрозорий темний текст, подвійний `text-shadow` (білий glow + темний drop) — читається і на білому, і на темному фоні. Hover підвищує контраст.
+
+Результат (`#geminiResult`) — у **лівому нижньому** куті, той самий прозорий стиль із тінню. Автоматично ховається через **12 секунд**. Помилки виводяться тим самим стилем без червоного кольору.
+
+### Назва вкладки та favicon
+
+Кабінет автоматично підхоплює назву та іконку з цільового сайту:
+
+- **Favicon (без JS)**: у [public/user.html](public/user.html) тег `<link rel="icon" id="favicon" href="/_p/favicon.ico">`. Браузер запитує `/_p/favicon.ico` → `proxyHandle` → проксі-запит на `/favicon.ico` цільового сайту. Працює ще до завантаження iframe.
+- **Title + кастомні іконки** ([syncMetaFromFrame](public/static/user.js#L39)) — на `iframe.load`:
+  - `document.title = frame.contentDocument.title` (same-origin через проксі); якщо в таргеті title порожній — fallback на `me.name`.
+  - Шукає `<link rel~="icon">` чи `<link rel="shortcut icon">` у iframe-документі. Якщо origin збігається з нашим — підставляє `/_p<path>` (іде через проксі); якщо CDN іншого хоста — використовує абсолютний URL без змін (для favicon CORS не діє).
+- Спрацьовує на кожен `load` iframe-а — внутрішня навігація (anchor-кліки в таргеті) теж синхронізує title/favicon.
 
 ## Скріншот для Gemini
 
-Вся обробка — на клієнті ([user.js:88](public/static/user.js#L88)):
+Вся обробка — на клієнті ([initGemini, user.js:120](public/static/user.js#L120)):
 
 1. `getFrameWindow()` бере `iframe.contentWindow`/`contentDocument`. Cross-origin → одразу `Error('iframe недоступний')`.
 2. `ensureHtml2Canvas(win)` — підключає [html2canvas 1.4.1](https://html2canvas.hertzen.com/) із CDN у `iframe.contentDocument` (на самій сторінці воно вже є — підвантажене з `<script>` у [user.html](public/user.html)).
@@ -206,6 +231,21 @@ Top-bar (`<header id="bar">`) за замовчуванням схований; 
 5. `POST /api/gemini/solve` → відповідь показується в `.gemini-result`.
 
 Захист: одночасний запит блокується флагом `busy`; кнопка дизейблиться під час запиту.
+
+## Адаптивність (мобільні)
+
+Один media-блок у [public/static/style.css](public/static/style.css) — `@media (max-width: 640px)`:
+
+- **Top-bar**: `flex-wrap: wrap`, шрифт `.8rem`, gap `.4rem`. Ім'я користувача отримує `flex-basis: 100%` (переноситься в окремий рядок) із `text-overflow: ellipsis` для довгих імен. Padding `.5rem 60px .5rem .75rem` — права частина зарезервована під тригер.
+- **Адмін-панель**:
+  - `.admin { padding: 1rem }` (замість 2rem)
+  - `.admin__header` — `flex-wrap: wrap`, заголовок «Користувачі» переноситься на свій рядок (`flex-basis: 100%`), кнопки «До свого акаунта»/«Вихід» розтягуються на повну ширину (`flex: 1`)
+  - `.admin__spacer { display: none }` — на мобільному не потрібен
+  - `.form { max-width: 100% }`, `.form__actions` — кнопки `flex: 1`
+  - `.section { overflow-x: auto }` — таблиця користувачів отримує **горизонтальний скрол** замість стискання колонок
+  - У `.table` — менші паддинги/шрифт, `truncate` обмежено 140 px
+- **Gemini-результат** — `max-width: 80vw` замість 50vw, шрифт `.85rem`.
+- **Модалка налаштувань** — `padding: 1rem` замість 1.5rem.
 
 ## Налаштування
 

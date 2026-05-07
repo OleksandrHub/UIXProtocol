@@ -27,7 +27,10 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 - Admin panel: user CRUD, grant admin rights, manage API keys
 - User dashboard: change target URL, change password, add/remove Gemini API keys
 - Google Gemini integration: iframe screenshot → short test answer
-- `Alt+G/H/M` keyboard shortcuts and mouse-wheel control (no extra toolbars needed)
+- `Alt+G/H/M` keyboard shortcuts and mouse-wheel control with `Ctrl`/`Alt` modifier
+- Invisible 44×44 click zone in the top-right corner that toggles the menu
+- Tab title and favicon automatically synced with the proxied site
+- Responsive layout for mobile (top-bar, admin panel, user table)
 - Isolated "preview" mode for unauthenticated visitors via direct link `/_p/<id>/...`
 
 ## Architecture
@@ -135,8 +138,9 @@ Flow:
 
 `enterAuthed(me, { fromLogin })`:
 - Shows the top-bar with the user name plus "Settings", "Admin" (admins only), "Logout".
+- Wires up `barTrigger` (an invisible 44×44 click zone in the top-right corner) → click toggles the menu.
 - `GET /api/config` → sets `allow="..."` on the iframe per `iframePermissions`, then `frame.src = proxyBase` (`/_p/`) unless this is a redirect right after login (`fromLogin=true` — the iframe already shows the target).
-- Spawns the Gemini panel (the "Скрін" button) and registers shortcuts / wheel.
+- Spawns the Gemini panel, registers shortcuts / wheel, and attaches `frame.addEventListener('load', syncMetaFromFrame)` to mirror the target's title/favicon.
 - The settings dialog saves through three independent PUTs (`/me/url`, `/me/api-keys`, `/me/password`) — only fields that actually changed.
 
 `initLogin()`:
@@ -160,7 +164,7 @@ Plain `name + password` form → `POST /api/login` → redirect to `/<user.id>/`
 
 ## Keyboard shortcuts
 
-`installShortcuts()` in [public/static/user.js](public/static/user.js#L214) registers a `keydown` listener on `window` and **also** mirrors it into `iframe.contentDocument` (via `attachToFrame` after `load`) — so the shortcuts still fire when focus is inside the target. The handler only triggers on `Alt + key` (no `Ctrl`/`Meta`) and is **ignored** in text inputs (`INPUT`, `TEXTAREA`, `contentEditable`).
+`installShortcuts()` in [public/static/user.js](public/static/user.js#L245) registers a `keydown` listener on `window` and **also** mirrors it into `iframe.contentDocument` (via `attachToFrame` after `load`) — so the shortcuts still fire when focus is inside the target. The handler only triggers on `Alt + key` (no `Ctrl`/`Meta`) and is **ignored** in text inputs (`INPUT`, `TEXTAREA`, `contentEditable`).
 
 | Key | Action | Implementation |
 | --- | --- | --- |
@@ -183,21 +187,42 @@ The same `installShortcuts()` listens for `wheel` (`passive: false`, capture) an
 
 ## Menu and settings
 
-The top-bar (`<header id="bar">`) is hidden by default; it appears after a successful login. Buttons:
+### Menu trigger
 
+`<div id="barTrigger" class="bar-trigger">` — an invisible **44×44 px** click zone in the top-right corner (`position: fixed; top: 0; right: 0; background: transparent; z-index: 90`). The same click both opens and closes the menu (equivalent to `Alt+M`). The bar reserves `padding-right: 60px` (44 px trigger + 16 px buffer) so the "Logout" button never sits underneath the trigger.
+
+### Top-bar
+
+`<header id="bar">` is hidden by default and shows up after a successful login. Visibility is the `.show` class — `transform: translateY(-100%)` ↔ `translateY(0)` with a `.2s` transition.
+
+Buttons:
 - **User name** — plain text.
-- **Settings** — opens the modal with three fields:
+- **Settings** — opens a modal with three fields:
   - Site URL → `PUT /api/me/url` → on save, the iframe reloads from the new target
   - API keys (one per line) → `PUT /api/me/api-keys`
   - New password (empty — keep current) → `PUT /api/me/password`
 - **Admin** — link to `/admin` (visible only when `isAdmin=true`).
 - **Logout** — `POST /api/logout`, then redirect to `/`.
 
-In addition, a Gemini panel sits in the bottom-right corner with a "Скрін" button (same action as `Alt+G`). The result is a floating block that auto-hides after **12 seconds**.
+### Gemini panel
+
+The "S" button (`#screenshotBtn`) sits in the **top-left** corner (`top: 1rem; left: 1rem`). Style: `background: transparent`, dim dark text, dual `text-shadow` (white glow + dark drop) — readable on both light and dark backgrounds. Hover boosts contrast.
+
+The result (`#geminiResult`) sits in the **bottom-left** corner with the same transparent + text-shadow style. It auto-hides after **12 seconds**. Errors render with the same plain style — no red error variant.
+
+### Tab title and favicon
+
+The dashboard automatically picks up the proxied site's name and icon:
+
+- **Favicon (no JS)**: [public/user.html](public/user.html) declares `<link rel="icon" id="favicon" href="/_p/favicon.ico">`. The browser fetches `/_p/favicon.ico` → `proxyHandle` → upstream `/favicon.ico` on the target. Works before the iframe even loads.
+- **Title + custom icon paths** ([syncMetaFromFrame](public/static/user.js#L39)) — on `iframe.load`:
+  - `document.title = frame.contentDocument.title` (same-origin via the proxy); falls back to `me.name` if the target has no title.
+  - Looks for `<link rel~="icon">` or `<link rel="shortcut icon">` inside the iframe document. If origin matches our own — substitutes `/_p<path>` (so it goes through the proxy); if it's a different-host CDN — uses the absolute URL as-is (favicons aren't subject to CORS).
+- Fires on every iframe `load` — internal anchor navigation in the target also re-syncs title/favicon.
 
 ## Gemini screenshot
 
-All processing is on the client ([user.js:88](public/static/user.js#L88)):
+All processing is on the client ([initGemini, user.js:120](public/static/user.js#L120)):
 
 1. `getFrameWindow()` grabs `iframe.contentWindow` / `contentDocument`. Cross-origin → immediate `Error('iframe недоступний')`.
 2. `ensureHtml2Canvas(win)` — injects [html2canvas 1.4.1](https://html2canvas.hertzen.com/) from CDN into `iframe.contentDocument` (the outer page already has it, included via `<script>` in [user.html](public/user.html)).
@@ -206,6 +231,21 @@ All processing is on the client ([user.js:88](public/static/user.js#L88)):
 5. `POST /api/gemini/solve` → answer is rendered into `.gemini-result`.
 
 Guards: a concurrent call is blocked by the `busy` flag; the button is disabled while a request is in flight.
+
+## Responsive (mobile)
+
+A single media block in [public/static/style.css](public/static/style.css) — `@media (max-width: 640px)`:
+
+- **Top-bar**: `flex-wrap: wrap`, `.8rem` font, `.4rem` gap. The user name gets `flex-basis: 100%` (drops onto its own row) with `text-overflow: ellipsis` for long names. Padding `.5rem 60px .5rem .75rem` — the right side is reserved for the trigger.
+- **Admin panel**:
+  - `.admin { padding: 1rem }` (was 2rem)
+  - `.admin__header` — `flex-wrap: wrap`, the "Користувачі" heading drops to its own row (`flex-basis: 100%`), the "До свого акаунта"/"Вихід" buttons stretch to full width (`flex: 1`)
+  - `.admin__spacer { display: none }` — not needed on mobile
+  - `.form { max-width: 100% }`, `.form__actions` buttons get `flex: 1`
+  - `.section { overflow-x: auto }` — the user table gets a **horizontal scroll** instead of cramped columns
+  - In `.table` — smaller padding/font, `truncate` capped at 140 px
+- **Gemini result** — `max-width: 80vw` instead of 50vw, `.85rem` font.
+- **Settings modal** — `padding: 1rem` instead of 1.5rem.
 
 ## Configuration
 
