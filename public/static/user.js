@@ -234,6 +234,8 @@ function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar }) {
   const WHEEL_COOLDOWN = 700;
   const handleWheel = (e) => {
     if (!e.deltaY) return;
+    e.preventDefault();
+    e.stopPropagation();
     const now = Date.now();
     if (now - lastWheel < WHEEL_COOLDOWN) return;
     lastWheel = now;
@@ -242,14 +244,14 @@ function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar }) {
   };
 
   window.addEventListener('keydown', handleKey, true);
-  window.addEventListener('wheel', handleWheel, { passive: true });
+  window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
 
   const attachToFrame = () => {
     try {
       const fdoc = frame.contentDocument;
       if (!fdoc) return;
       fdoc.addEventListener('keydown', handleKey, true);
-      fdoc.addEventListener('wheel', handleWheel, { passive: true });
+      fdoc.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     } catch {}
   };
   frame.addEventListener('load', attachToFrame);
