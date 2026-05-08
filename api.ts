@@ -1,19 +1,31 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  addUserFile,
   createUser,
+  DEFAULT_PROMPT_TEXT,
   deleteUser,
+  deleteUserFile,
   getUserById,
   getUserByName,
+  getUserFiles,
+  KNOWN_MODELS,
+  listUserFiles,
   listUsers,
   updateUser,
   verifyFirstCharById,
   verifyPasswordById,
   verifyPasswordByName,
 } from './db';
+import type { UserPrompt } from './db';
 import { clearSession, getSessionUserId, setSession } from './session';
 import { environment } from './environments/environment';
-import { solveWithGemini } from './gemini';
+import {
+  getCachedFileIds,
+  invalidateUploadsForUser,
+  preloadFiles,
+  solveWithGemini,
+} from './gemini';
 
 function readJson<T>(req: IncomingMessage, maxBytes = 1_000_000): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -157,6 +169,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       sendJson(res, 200, {
         proxyPath: '/_p/',
         iframePermissions: environment.iframePermissions,
+        knownModels: KNOWN_MODELS,
+        defaultPrompt: DEFAULT_PROMPT_TEXT,
       });
       return true;
     }
@@ -215,6 +229,175 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return true;
     }
 
+    if (path === '/api/me/prompts' && req.method === 'PUT') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const body = await readJson<{ prompts?: UserPrompt[]; activePromptId?: string }>(req);
+      if (!Array.isArray(body.prompts)) {
+        sendJson(res, 400, { error: 'prompts array required' });
+        return true;
+      }
+      const cleaned = body.prompts
+        .filter((p) => p && typeof p.id === 'string' && typeof p.text === 'string')
+        .map((p) => ({
+          id: p.id,
+          name: typeof p.name === 'string' ? p.name : 'Untitled',
+          text: p.text,
+        }));
+      const activeId =
+        typeof body.activePromptId === 'string' &&
+        cleaned.some((p) => p.id === body.activePromptId)
+          ? body.activePromptId
+          : cleaned[0]?.id ?? '';
+      sendJson(res, 200, updateUser(meUser.id, { prompts: cleaned, activePromptId: activeId }));
+      return true;
+    }
+
+    if (path === '/api/me/models' && req.method === 'PUT') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const body = await readJson<{ enabledModels?: string[]; activeModel?: string }>(req);
+      if (!Array.isArray(body.enabledModels)) {
+        sendJson(res, 400, { error: 'enabledModels array required' });
+        return true;
+      }
+      const known = new Set<string>(KNOWN_MODELS);
+      const enabled = body.enabledModels.filter((m) => known.has(m));
+      const active =
+        typeof body.activeModel === 'string' && enabled.includes(body.activeModel)
+          ? body.activeModel
+          : enabled[0] ?? '';
+      sendJson(
+        res,
+        200,
+        updateUser(meUser.id, { enabledModels: enabled, activeModel: active })
+      );
+      return true;
+    }
+
+    if (path === '/api/me/active-model' && req.method === 'PUT') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const body = await readJson<{ activeModel?: string }>(req);
+      if (typeof body.activeModel !== 'string' || !meUser.enabledModels.includes(body.activeModel)) {
+        sendJson(res, 400, { error: 'activeModel must be one of enabledModels' });
+        return true;
+      }
+      sendJson(res, 200, updateUser(meUser.id, { activeModel: body.activeModel }));
+      return true;
+    }
+
+    if (path === '/api/me/files' && req.method === 'GET') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      sendJson(res, 200, listUserFiles(meUser.id));
+      return true;
+    }
+
+    if (path === '/api/me/files' && req.method === 'POST') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const body = await readJson<{ name?: string; mime?: string; dataBase64?: string }>(
+        req,
+        30_000_000
+      );
+      if (!body.name || !body.dataBase64) {
+        sendJson(res, 400, { error: 'name and dataBase64 required' });
+        return true;
+      }
+      const buf = Buffer.from(body.dataBase64, 'base64');
+      if (!buf.length) {
+        sendJson(res, 400, { error: 'empty file' });
+        return true;
+      }
+      const meta = addUserFile(meUser.id, body.name, body.mime ?? 'application/octet-stream', buf);
+      sendJson(res, 201, meta);
+      return true;
+    }
+
+    if (path === '/api/me/files/status' && req.method === 'GET') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const apiKeys = (meUser.apiKeys ?? []).filter(Boolean);
+      const files = listUserFiles(meUser.id);
+      const cachedByKey = apiKeys.map((k) => getCachedFileIds(k));
+      const totalKeys = apiKeys.length;
+      const fileStatuses = files.map((f) => {
+        const cachedIn = cachedByKey.filter((s) => s.has(f.id)).length;
+        return {
+          id: f.id,
+          name: f.name,
+          size: f.size,
+          cachedKeys: cachedIn,
+          totalKeys,
+        };
+      });
+      const allReady = totalKeys > 0 && fileStatuses.every((s) => s.cachedKeys === totalKeys);
+      sendJson(res, 200, {
+        files: fileStatuses,
+        totalKeys,
+        ready: allReady,
+        hasFiles: files.length > 0,
+      });
+      return true;
+    }
+
+    if (path === '/api/me/files/preload' && req.method === 'POST') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const apiKeys = (meUser.apiKeys ?? []).filter(Boolean);
+      if (!apiKeys.length) {
+        sendJson(res, 400, { error: 'no API keys configured' });
+        return true;
+      }
+      const files = getUserFiles(meUser.id);
+      try {
+        const result = await preloadFiles(apiKeys, files);
+        sendJson(res, 200, result);
+      } catch (e) {
+        sendJson(res, 502, { error: (e as Error).message });
+      }
+      return true;
+    }
+
+    const fileIdMatch = path.match(/^\/api\/me\/files\/(\d+)$/);
+    if (fileIdMatch && req.method === 'DELETE') {
+      const meUser = getCurrentUser(req);
+      if (!meUser) {
+        sendJson(res, 401, { error: 'not authenticated' });
+        return true;
+      }
+      const id = Number(fileIdMatch[1]);
+      if (deleteUserFile(meUser.id, id)) {
+        invalidateUploadsForUser([id]);
+        sendNoContent(res);
+      } else {
+        sendJson(res, 404, { error: 'not found' });
+      }
+      return true;
+    }
+
     if (path === '/api/gemini/solve' && req.method === 'POST') {
       const meUser = getCurrentUser(req);
       if (!meUser) {
@@ -231,8 +414,30 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         sendJson(res, 400, { error: 'no API keys configured' });
         return true;
       }
+
+      const promptText =
+        meUser.prompts.find((p) => p.id === meUser.activePromptId)?.text ??
+        meUser.prompts[0]?.text ??
+        DEFAULT_PROMPT_TEXT;
+
+      const knownSet = new Set<string>(KNOWN_MODELS);
+      const enabled = (meUser.enabledModels ?? []).filter((m) => knownSet.has(m));
+      const ordered =
+        meUser.activeModel && enabled.includes(meUser.activeModel)
+          ? [meUser.activeModel, ...enabled.filter((m) => m !== meUser.activeModel)]
+          : enabled;
+      const models = ordered.length ? ordered : ['gemini-2.5-flash'];
+
+      const files = getUserFiles(meUser.id);
+
       try {
-        const answer = await solveWithGemini(keys, body.imageBase64);
+        const answer = await solveWithGemini({
+          apiKeys: keys,
+          imageBase64: body.imageBase64,
+          prompt: promptText,
+          models,
+          files,
+        });
         sendJson(res, 200, { answer });
       } catch (e) {
         sendJson(res, 502, { error: (e as Error).message });

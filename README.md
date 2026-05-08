@@ -26,8 +26,12 @@ npm run dev
 - Повна автентифікація (ім'я + пароль) + швидкий вхід за першим символом пароля
 - Адмін-панель: CRUD користувачів, видача прав адміна, керування API-ключами
 - Особистий кабінет: змінити цільовий URL, пароль, додати/видалити Gemini API-ключі
-- Інтеграція з Google Gemini: скрін iframe → коротка відповідь на тест
-- Гарячі клавіші `Alt+G/H/M` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
+- Інтеграція з Google Gemini (через офіційний `@google/genai` SDK): скрін iframe → коротка відповідь на тест
+- **Власні промти** з вибором активного — зберігаються в БД на користувача
+- **Перемикання моделей**: вмикати/вимикати моделі в налаштуваннях, активна модель циклічно перемикається через `Alt+X`
+- **Вкладення файлів**: будь-які файли (PDF, зображення, текст, аудіо, відео тощо) зберігаються в БД і автоматично передаються в Gemini як контекст разом зі скріншотом (через Files API + `createPartFromUri`)
+- **Кастомізація вигляду** (шрифт/розмір/колір/фон) для відповіді Gemini та кнопки `S` — зберігається в `localStorage`
+- Гарячі клавіші `Alt+G/H/M/C` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
 - Невидимий клік-зон 44×44 у правому верхньому куті для відкриття меню
 - Назва вкладки та favicon автоматично підхоплюються з цільового сайту
 - Адаптивна верстка для мобільних (top-bar, адмін-панель, таблиця користувачів)
@@ -40,10 +44,10 @@ npm run dev
 | Файл | Призначення |
 | --- | --- |
 | [server.ts](server.ts) | HTTP-сервер на одному порту: статика, маршрути користувача/адміна, проксі |
-| [api.ts](api.ts) | REST API (`/api/*`) — логін, користувачі, налаштування, Gemini |
-| [db.ts](db.ts) | SQLite (`better-sqlite3`) + scrypt-хешування паролів |
+| [api.ts](api.ts) | REST API (`/api/*`) — логін, користувачі, налаштування, промти, моделі, файли, Gemini |
+| [db.ts](db.ts) | SQLite (`better-sqlite3`) + scrypt-хешування паролів, таблиця `user_files` для вкладених файлів |
 | [session.ts](session.ts) | In-memory сесії, HttpOnly-cookie `uix_session` |
-| [gemini.ts](gemini.ts) | Виклик Gemini API + парсинг короткої відповіді |
+| [gemini.ts](gemini.ts) | Виклик Gemini через `@google/genai` SDK + Files API + парсинг короткої відповіді |
 | [environments/environment.ts](environments/environment.ts) | Конфіг: порт, дефолтний таргет, TTL сесії, iframe-дозволи |
 | [create-admin.ts](create-admin.ts) | CLI для створення першого адміна |
 
@@ -94,23 +98,41 @@ npm run dev
 
 - `hashPassword(password)` / `verifyHash(password, stored)` — scrypt (`node:crypto`), сіль 16 байт, ключ 64 байти, формат `scrypt$<salt-hex>$<hash-hex>`. Перевірка через `crypto.timingSafeEqual`.
 - `firstChar(s)` — береться через `[...s][0]`, тобто коректно обробляє Unicode-символи (емодзі тощо).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD над `users`. `password_first` записується одночасно з `password_hash`.
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD над `users`. `password_first` записується одночасно з `password_hash`. `updateUser` приймає також `prompts`, `activePromptId`, `enabledModels`, `activeModel`.
+- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` — CRUD для прикріплених файлів (тип не обмежений: PDF, зображення, текст, аудіо, відео).
 - `verifyPasswordById` / `verifyPasswordByName` — повна перевірка пароля; на успіху викликає `backfillFirstChar` (якщо в БД ще немає `password_first`).
 - `verifyFirstCharById` — порівнює один символ із `password_first` (без хешу). Працює лише якщо колонка вже заповнена.
+- Експортує константи `KNOWN_MODELS` (список доступних Gemini-моделей) і `DEFAULT_PROMPT_TEXT` (дефолтний промт для тест-розв'язування).
 
 Схема `users`:
 
 ```sql
-id            INTEGER PRIMARY KEY AUTOINCREMENT
-name          TEXT UNIQUE NOT NULL
-password_hash TEXT NOT NULL
-password_first TEXT NOT NULL DEFAULT ''
-api_keys      TEXT NOT NULL DEFAULT '[]'   -- JSON-масив
-is_admin      INTEGER NOT NULL DEFAULT 0
-target_url    TEXT NOT NULL DEFAULT ''
+id              INTEGER PRIMARY KEY AUTOINCREMENT
+name            TEXT UNIQUE NOT NULL
+password_hash   TEXT NOT NULL
+password_first  TEXT NOT NULL DEFAULT ''
+api_keys        TEXT NOT NULL DEFAULT '[]'   -- JSON-масив
+is_admin        INTEGER NOT NULL DEFAULT 0
+target_url      TEXT NOT NULL DEFAULT ''
+prompts         TEXT NOT NULL DEFAULT '[]'   -- JSON: [{id, name, text}, ...]
+active_prompt_id TEXT NOT NULL DEFAULT ''
+enabled_models  TEXT NOT NULL DEFAULT '[]'   -- JSON-масив імен моделей
+active_model    TEXT NOT NULL DEFAULT ''
 ```
 
-При першому запуску, якщо колонка `password_first` відсутня — додається через `ALTER TABLE` (міграція в рантаймі).
+Схема `user_files`:
+
+```sql
+id          INTEGER PRIMARY KEY AUTOINCREMENT
+user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+name        TEXT NOT NULL
+mime        TEXT NOT NULL
+size        INTEGER NOT NULL
+data        BLOB NOT NULL
+created_at  INTEGER NOT NULL
+```
+
+Усі нові колонки додаються через `ALTER TABLE ADD COLUMN` у рантаймі — стара БД мігрується автоматично при першому запуску.
 
 ### `session.ts`
 
@@ -122,9 +144,15 @@ target_url    TEXT NOT NULL DEFAULT ''
 
 ### `gemini.ts`
 
-- `solveWithGemini(apiKeys, imageBase64)` — пробує по черзі ключі для моделі `gemini-2.5-flash` (список можна розширити в константі `MODELS`), 20 секунд таймаут на запит через `AbortController`.
-- `callGemini(key, model, base64)` — POST до `generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`, prompt вимагає коротку відповідь у форматі `Відповідь: ...`.
+Використовує офіційний `@google/genai` SDK замість «голого» `fetch`. Структура виклику:
+
+- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` — перебирає моделі в порядку, заданому користувачем (активна модель іде першою), для кожної моделі — всі API-ключі. Перший успіх повертає результат, інакше — кидає останню помилку. Таймаут — 20 с на запит, без авто-ретраїв.
+- `uploadFileForKey(client, apiKey, file)` — лінива загрузка `UserFile` (BLOB із БД) у Gemini Files API через `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Повертає `{ uri, mimeType, expiresAt }`. Результат кешується в пам'яті в `Map<"<apiKey>::<fileId>", UploadedFile>` на ~40 годин (Files API сам тримає файли ~48h).
+- Сам запит — `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 } }, contents })`. У `parts` спочатку текст промту, потім PDF-парти через `createPartFromUri(uri, mime)`, наприкінці — `inlineData` зі скріншотом (JPEG base64).
+- `invalidateUploadsForUser(fileIds)` — викликається з `api.ts` коли користувач видаляє файл, щоб скинути кеш для цього `fileId` по всіх ключах.
 - `parseResultText(text)` — спочатку шукає `Відповідь:` / `Answer:`, потім перший рядок, що матчить `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
+
+Якщо запит до однієї пари (модель, ключ) падає, кеш URI для цього ключа автоматично скидається — наступна спроба перезавантажить файли.
 
 ## Сторінки клієнта
 
@@ -141,7 +169,8 @@ target_url    TEXT NOT NULL DEFAULT ''
 - Реєструє `barTrigger` (невидимий клік-зон 44×44 у правому верхньому куті) → клік toggle меню.
 - Запит `GET /api/config` → ставить `allow="..."` на iframe згідно `iframePermissions` і виставляє `frame.src` в `proxyBase` (`/_p/`), якщо це не редирект після свіжого логіну (`fromLogin=true` — iframe уже показує таргет).
 - Запускає панель Gemini, встановлює гарячі клавіші / колесо, навішує `frame.addEventListener('load', syncMetaFromFrame)` для синхронізації title/favicon.
-- Налаштування зберігаються трьома окремими PUT-запитами (`/me/url`, `/me/api-keys`, `/me/password`) — лише для змінених полів.
+- При завантаженні застосовує збережений вигляд (шрифт/колір/фон для відповіді та кнопки `S`) із `localStorage` через CSS-змінні.
+- Налаштування зберігаються кількома PUT-запитами — лише для змінених полів: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`. PDF-файли заливаються/видаляються одразу через `/me/files`. UI-вигляд кладеться в `localStorage`.
 
 `initLogin()`:
 - Виставляє `frame.src = "/_p/<id>/"` — користувач бачить таргет ще до логіну (preview-режим).
@@ -171,6 +200,7 @@ target_url    TEXT NOT NULL DEFAULT ''
 | `Alt+G` | Зробити скрін iframe і надіслати в Gemini | `triggerGemini()` |
 | `Alt+H` | Показати/сховати останню відповідь Gemini | `toggleResult()` |
 | `Alt+M` | Показати/сховати верхнє меню (top-bar) | `toggleBar()` |
+| `Alt+C` | Перемкнути активну Gemini-модель на наступну з увімкнених | `cycleModel()` — `PUT /api/me/active-model`, скорочена назва спливає в `#modelToast` (правий нижній кут) |
 
 Для iframe із cross-origin таргета `frame.contentDocument` буде `null` — тоді клавіші ловить тільки зовнішнє вікно. Власне Gemini теж потребує same-origin доступу до iframe (бо знімок робиться з його DOM через `html2canvas`).
 
@@ -197,18 +227,22 @@ target_url    TEXT NOT NULL DEFAULT ''
 
 Кнопки:
 - **Ім'я користувача** — просто текст.
-- **Налаштування** — модалка з трьома полями:
-  - URL сайту → `PUT /api/me/url` → після збереження iframe перезавантажується з нового таргета
-  - API ключі (по одному в рядок) → `PUT /api/me/api-keys`
-  - Новий пароль (порожньо — не змінювати) → `PUT /api/me/password`
+- **Налаштування** — модалка з табами:
+  - **Основні**: URL сайту → `PUT /api/me/url`, API ключі → `PUT /api/me/api-keys`, новий пароль (порожньо — не змінювати) → `PUT /api/me/password`.
+  - **Промти**: довільна кількість іменованих промтів, один обраний як активний (radio). Зберігається в `prompts` + `active_prompt_id` через `PUT /api/me/prompts`.
+  - **Моделі**: чекбокси по списку `KNOWN_MODELS`, radio для активної моделі, підказка про `Alt+C`. Зберігається через `PUT /api/me/models`.
+  - **Файли**: довільні файли (PDF, зображення, текст, аудіо, відео…), що передаються в Gemini контекстом. Додавання — `POST /api/me/files` (base64, MIME визначається браузером), видалення — `DELETE /api/me/files/:id`.
+  - **Вигляд**: окремо для відповіді Gemini та кнопки `S` — шрифт, розмір, колір тексту, колір фону + чекбокс «прозорий фон». Live-preview через CSS-змінні; зберігається в `localStorage` під ключем `uix.appearance`. Зміни застосовуються миттєво, кнопка «Скасувати» відновлює попередній збережений набір.
 - **Адмін** — посилання на `/admin` (тільки для `isAdmin=true`).
 - **Вихід** — `POST /api/logout`, редирект на `/`.
 
 ### Панель Gemini
 
-Кнопка-«S» (`#screenshotBtn`) — у **верхньому лівому** куті (`top: 1rem; left: 1rem`). Стиль: `background: transparent`, напівпрозорий темний текст, подвійний `text-shadow` (білий glow + темний drop) — читається і на білому, і на темному фоні. Hover підвищує контраст.
+Кнопка-«S» (`#screenshotBtn`) — у **верхньому лівому** куті (`top: 1rem; left: 1rem`). Стиль за замовчуванням: `background: transparent`, напівпрозорий темний текст, подвійний `text-shadow` (білий glow + темний drop) — читається і на білому, і на темному фоні. Hover підвищує контраст.
 
 Результат (`#geminiResult`) — у **лівому нижньому** куті, той самий прозорий стиль із тінню. Автоматично ховається через **12 секунд**. Помилки виводяться тим самим стилем без червоного кольору.
+
+Стиль кнопки і результату керується через CSS-змінні (`--screenshot-font/size/color/bg`, `--result-font/size/color/bg`), що виставляються `applyAppearance()` на основі `localStorage["uix.appearance"]`. Це дозволяє змінювати шрифт/розмір/колір/фон обох елементів через таб «Вигляд» без перезавантаження.
 
 ### Назва вкладки та favicon
 
@@ -222,13 +256,19 @@ target_url    TEXT NOT NULL DEFAULT ''
 
 ## Скріншот для Gemini
 
-Вся обробка — на клієнті ([initGemini, user.js:120](public/static/user.js#L120)):
+Клієнт ([initGemini, user.js](public/static/user.js)):
 
 1. `getFrameWindow()` бере `iframe.contentWindow`/`contentDocument`. Cross-origin → одразу `Error('iframe недоступний')`.
 2. `ensureHtml2Canvas(win)` — підключає [html2canvas 1.4.1](https://html2canvas.hertzen.com/) із CDN у `iframe.contentDocument` (на самій сторінці воно вже є — підвантажене з `<script>` у [user.html](public/user.html)).
 3. `captureFrame()` — `html2canvas` із `useCORS`, `allowTaint`, видимою областю (`scrollX/scrollY` + `innerWidth/innerHeight`).
 4. `canvasToBase64Jpeg()` — даунскейл до **1600 px** по ширині, JPEG quality **0.7**, base64.
-5. `POST /api/gemini/solve` → відповідь показується в `.gemini-result`.
+5. `POST /api/gemini/solve` із одним лише `imageBase64`. Активний промт, активна модель і прикріплені PDF беруться сервером із даних користувача в БД.
+6. Відповідь показується в `.gemini-result`.
+
+Сервер ([api.ts](api.ts) → [gemini.ts](gemini.ts)):
+- Бере активний промт користувача (fallback — перший зі списку, потім `DEFAULT_PROMPT_TEXT`).
+- Формує список моделей: спочатку `activeModel`, далі решта `enabledModels`. Якщо нічого не вибрано — fallback на `gemini-2.5-flash`.
+- Підвантажує всі `user_files` користувача (будь-якого типу — PDF/зображення/текст/аудіо/відео), передає їх у `solveWithGemini` → `client.files.upload` (з кешуванням URI per ключ).
 
 Захист: одночасний запит блокується флагом `busy`; кнопка дизейблиться під час запиту.
 
@@ -272,18 +312,24 @@ target_url    TEXT NOT NULL DEFAULT ''
 | POST | `/api/login/:id/quick` | `{char}` — швидкий вхід за першим символом |
 | POST | `/api/admin/login` | Як `/api/login`, але відмовляє не-адмінам |
 | POST | `/api/logout` | — |
-| GET  | `/api/me` | Поточний користувач |
-| GET  | `/api/config` | `{ proxyPath, iframePermissions }` |
+| GET  | `/api/me` | Поточний користувач (включно з `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
+| GET  | `/api/config` | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }` |
 | GET  | `/api/users/by-name/:name` | `{ id, name, targetUrl }` |
 
 ### Користувач (потребує сесії)
 
-| Метод | Шлях | Тіло |
+| Метод | Шлях | Тіло / результат |
 | --- | --- | --- |
 | PUT | `/api/me/url` | `{ url: string }` |
 | PUT | `/api/me/password` | `{ password: string }` |
 | PUT | `/api/me/api-keys` | `{ apiKeys: string[] }` |
-| POST | `/api/gemini/solve` | `{ imageBase64: string }` → `{ answer }` |
+| PUT | `/api/me/prompts` | `{ prompts: {id,name,text}[], activePromptId?: string }` |
+| PUT | `/api/me/models` | `{ enabledModels: string[], activeModel?: string }` (фільтрується за `KNOWN_MODELS`) |
+| PUT | `/api/me/active-model` | `{ activeModel: string }` — має бути в `enabledModels` |
+| GET | `/api/me/files` | `[{id, name, mime, size, createdAt}]` |
+| POST | `/api/me/files` | `{ name, mime, dataBase64 }` → метадані файлу (ліміт 30 МБ) |
+| DELETE | `/api/me/files/:id` | `204`, скидає кеш URI у `gemini.ts` |
+| POST | `/api/gemini/solve` | `{ imageBase64: string }` → `{ answer }`. Промт/моделі/PDF беруться з БД |
 
 ### Адміністратор (`isAdmin=true`)
 
@@ -324,7 +370,7 @@ npm start
 
 ## Залежності
 
-- **Рантайм**: [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3)
+- **Рантайм**: [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3), [`@google/genai`](https://www.npmjs.com/package/@google/genai) — офіційний SDK Gemini API (Files API + `generateContent`)
 - **Dev/build**: `tsx`, `typescript`, `@types/node`, `@types/better-sqlite3`
 - **CDN на клієнті** (без npm): [html2canvas 1.4.1](https://cdnjs.com/libraries/html2canvas) — для скріншота iframe
 

@@ -26,8 +26,12 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 - Full credentials login (name + password) plus quick-login by the first character of the password
 - Admin panel: user CRUD, grant admin rights, manage API keys
 - User dashboard: change target URL, change password, add/remove Gemini API keys
-- Google Gemini integration: iframe screenshot → short test answer
-- `Alt+G/H/M` keyboard shortcuts and mouse-wheel control with `Ctrl`/`Alt` modifier
+- Google Gemini integration via the official `@google/genai` SDK: iframe screenshot → short test answer
+- **Custom prompts** with one active prompt — stored per-user in the DB
+- **Model switching**: enable/disable models in settings; cycle the active model with `Alt+X`
+- **File attachments**: any file type (PDF, images, text, audio, video, …) is stored in the DB and automatically forwarded to Gemini as context alongside the screenshot (Files API + `createPartFromUri`)
+- **Appearance customisation** (font / size / color / background) for the Gemini answer and the `S` button — kept in `localStorage`
+- `Alt+G/H/M/C` keyboard shortcuts and mouse-wheel control with `Ctrl`/`Alt` modifier
 - Invisible 44×44 click zone in the top-right corner that toggles the menu
 - Tab title and favicon automatically synced with the proxied site
 - Responsive layout for mobile (top-bar, admin panel, user table)
@@ -40,10 +44,10 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 | File | Purpose |
 | --- | --- |
 | [server.ts](server.ts) | HTTP server on a single port: static, user/admin routes, proxy |
-| [api.ts](api.ts) | REST API (`/api/*`) — login, users, settings, Gemini |
-| [db.ts](db.ts) | SQLite (`better-sqlite3`) + scrypt password hashing |
+| [api.ts](api.ts) | REST API (`/api/*`) — login, users, settings, prompts, models, files, Gemini |
+| [db.ts](db.ts) | SQLite (`better-sqlite3`) + scrypt password hashing, `user_files` table for attachments |
 | [session.ts](session.ts) | In-memory sessions, `uix_session` HttpOnly cookie |
-| [gemini.ts](gemini.ts) | Gemini API call + parsing of the short test answer |
+| [gemini.ts](gemini.ts) | Gemini calls via the `@google/genai` SDK + Files API + parsing of the short test answer |
 | [environments/environment.ts](environments/environment.ts) | Config: port, default target, session TTL, iframe permissions |
 | [create-admin.ts](create-admin.ts) | CLI to create the first admin |
 
@@ -94,23 +98,41 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 
 - `hashPassword(password)` / `verifyHash(password, stored)` — scrypt (`node:crypto`), 16-byte salt, 64-byte key, format `scrypt$<salt-hex>$<hash-hex>`. Verification uses `crypto.timingSafeEqual`.
 - `firstChar(s)` — `[...s][0]`, so it correctly handles Unicode codepoints (emoji, etc.).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD over `users`. `password_first` is written alongside `password_hash`.
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`.
+- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` — CRUD for attached files (type is not restricted: PDF, images, text, audio, video).
 - `verifyPasswordById` / `verifyPasswordByName` — full password verification; on success calls `backfillFirstChar` if the column is empty.
 - `verifyFirstCharById` — compares one character against `password_first` (no hashing). Only works once the column is populated.
+- Exports `KNOWN_MODELS` (the list of supported Gemini models) and `DEFAULT_PROMPT_TEXT` (the default test-solving prompt).
 
 `users` schema:
 
 ```sql
-id            INTEGER PRIMARY KEY AUTOINCREMENT
-name          TEXT UNIQUE NOT NULL
-password_hash TEXT NOT NULL
-password_first TEXT NOT NULL DEFAULT ''
-api_keys      TEXT NOT NULL DEFAULT '[]'   -- JSON array
-is_admin      INTEGER NOT NULL DEFAULT 0
-target_url    TEXT NOT NULL DEFAULT ''
+id              INTEGER PRIMARY KEY AUTOINCREMENT
+name            TEXT UNIQUE NOT NULL
+password_hash   TEXT NOT NULL
+password_first  TEXT NOT NULL DEFAULT ''
+api_keys        TEXT NOT NULL DEFAULT '[]'   -- JSON array
+is_admin        INTEGER NOT NULL DEFAULT 0
+target_url      TEXT NOT NULL DEFAULT ''
+prompts         TEXT NOT NULL DEFAULT '[]'   -- JSON: [{id, name, text}, ...]
+active_prompt_id TEXT NOT NULL DEFAULT ''
+enabled_models  TEXT NOT NULL DEFAULT '[]'   -- JSON array of model names
+active_model    TEXT NOT NULL DEFAULT ''
 ```
 
-On first boot, if `password_first` is missing it's added via `ALTER TABLE` (runtime migration).
+`user_files` schema:
+
+```sql
+id          INTEGER PRIMARY KEY AUTOINCREMENT
+user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+name        TEXT NOT NULL
+mime        TEXT NOT NULL
+size        INTEGER NOT NULL
+data        BLOB NOT NULL
+created_at  INTEGER NOT NULL
+```
+
+All new columns are added via `ALTER TABLE ADD COLUMN` at runtime — old DBs are migrated automatically on first boot.
 
 ### `session.ts`
 
@@ -122,9 +144,15 @@ On first boot, if `password_first` is missing it's added via `ALTER TABLE` (runt
 
 ### `gemini.ts`
 
-- `solveWithGemini(apiKeys, imageBase64)` — tries each key for `gemini-2.5-flash` (extend the `MODELS` constant if needed), 20-second timeout per request via `AbortController`.
-- `callGemini(key, model, base64)` — POST to `generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`; the prompt asks for a short answer in the form `Відповідь: ...`.
+Uses the official `@google/genai` SDK instead of raw `fetch`. Call flow:
+
+- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` — iterates models in user-defined order (the active model first), and for each model tries every API key. The first success returns; otherwise the last error is thrown. 20-second timeout per request, no auto-retries.
+- `uploadFileForKey(client, apiKey, file)` — lazily uploads a `UserFile` (BLOB from the DB) to the Gemini Files API via `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Returns `{ uri, mimeType, expiresAt }`. The result is cached in memory in `Map<"<apiKey>::<fileId>", UploadedFile>` for ~40 hours (the Files API itself keeps files for ~48h).
+- The actual call: `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 } }, contents })`. `parts` start with the prompt text, then PDF parts via `createPartFromUri(uri, mime)`, ending with the screenshot `inlineData` (JPEG base64).
+- `invalidateUploadsForUser(fileIds)` — called from `api.ts` when a user deletes a file, clearing the cache for that `fileId` across every key.
 - `parseResultText(text)` — first looks for `Відповідь:` / `Answer:`, then for the first line matching `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
+
+If a request to one (model, key) pair fails, the URI cache for that key is reset automatically — the next attempt re-uploads the files.
 
 ## Client pages
 
@@ -141,7 +169,8 @@ Flow:
 - Wires up `barTrigger` (an invisible 44×44 click zone in the top-right corner) → click toggles the menu.
 - `GET /api/config` → sets `allow="..."` on the iframe per `iframePermissions`, then `frame.src = proxyBase` (`/_p/`) unless this is a redirect right after login (`fromLogin=true` — the iframe already shows the target).
 - Spawns the Gemini panel, registers shortcuts / wheel, and attaches `frame.addEventListener('load', syncMetaFromFrame)` to mirror the target's title/favicon.
-- The settings dialog saves through three independent PUTs (`/me/url`, `/me/api-keys`, `/me/password`) — only fields that actually changed.
+- On load, applies the saved appearance (font / color / background for the answer and the `S` button) from `localStorage` via CSS variables.
+- The settings dialog saves through several PUTs — only changed fields: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`. PDF files are uploaded/deleted live via `/me/files`. Appearance is written to `localStorage`.
 
 `initLogin()`:
 - Sets `frame.src = "/_p/<id>/"` so the user already sees the target before logging in (preview mode).
@@ -171,6 +200,7 @@ Plain `name + password` form → `POST /api/login` → redirect to `/<user.id>/`
 | `Alt+G` | Take an iframe screenshot and send to Gemini | `triggerGemini()` |
 | `Alt+H` | Show/hide the last Gemini answer | `toggleResult()` |
 | `Alt+M` | Show/hide the top-bar menu | `toggleBar()` |
+| `Alt+C` | Cycle the active Gemini model to the next enabled one | `cycleModel()` — `PUT /api/me/active-model`, the short name briefly appears in `#modelToast` (bottom-right corner) |
 
 For a cross-origin iframe target, `frame.contentDocument` will be `null` and only the outer-window listener fires. Gemini itself also requires same-origin access (the screenshot is built from the iframe's DOM via `html2canvas`).
 
@@ -197,18 +227,22 @@ The same `installShortcuts()` listens for `wheel` (`passive: false`, capture) an
 
 Buttons:
 - **User name** — plain text.
-- **Settings** — opens a modal with three fields:
-  - Site URL → `PUT /api/me/url` → on save, the iframe reloads from the new target
-  - API keys (one per line) → `PUT /api/me/api-keys`
-  - New password (empty — keep current) → `PUT /api/me/password`
+- **Settings** — opens a tabbed modal:
+  - **General**: site URL → `PUT /api/me/url`, API keys → `PUT /api/me/api-keys`, new password (empty — keep current) → `PUT /api/me/password`.
+  - **Prompts**: any number of named prompts, one chosen as active (radio). Persisted as `prompts` + `active_prompt_id` via `PUT /api/me/prompts`.
+  - **Models**: checkboxes over `KNOWN_MODELS`, a radio for the active model, plus a hint about `Alt+C`. Saved via `PUT /api/me/models`.
+  - **Files**: arbitrary attachments (PDF, images, text, audio, video, …) forwarded to Gemini as context. Add via `POST /api/me/files` (base64, MIME picked by the browser), delete via `DELETE /api/me/files/:id`.
+  - **Appearance**: separately for the Gemini result and the `S` button — font, size, text color, background color + a "transparent background" checkbox. Live preview via CSS variables; saved in `localStorage` under `uix.appearance`. Changes apply immediately; "Cancel" restores the last saved set.
 - **Admin** — link to `/admin` (visible only when `isAdmin=true`).
 - **Logout** — `POST /api/logout`, then redirect to `/`.
 
 ### Gemini panel
 
-The "S" button (`#screenshotBtn`) sits in the **top-left** corner (`top: 1rem; left: 1rem`). Style: `background: transparent`, dim dark text, dual `text-shadow` (white glow + dark drop) — readable on both light and dark backgrounds. Hover boosts contrast.
+The "S" button (`#screenshotBtn`) sits in the **top-left** corner (`top: 1rem; left: 1rem`). Default style: `background: transparent`, dim dark text, dual `text-shadow` (white glow + dark drop) — readable on both light and dark backgrounds. Hover boosts contrast.
 
 The result (`#geminiResult`) sits in the **bottom-left** corner with the same transparent + text-shadow style. It auto-hides after **12 seconds**. Errors render with the same plain style — no red error variant.
+
+Both the button and the result are themed via CSS variables (`--screenshot-font/size/color/bg`, `--result-font/size/color/bg`) populated by `applyAppearance()` from `localStorage["uix.appearance"]`. The "Appearance" tab can change font / size / color / background of either element on the fly, no reload needed.
 
 ### Tab title and favicon
 
@@ -222,13 +256,19 @@ The dashboard automatically picks up the proxied site's name and icon:
 
 ## Gemini screenshot
 
-All processing is on the client ([initGemini, user.js:120](public/static/user.js#L120)):
+Client side ([initGemini, user.js](public/static/user.js)):
 
 1. `getFrameWindow()` grabs `iframe.contentWindow` / `contentDocument`. Cross-origin → immediate `Error('iframe недоступний')`.
 2. `ensureHtml2Canvas(win)` — injects [html2canvas 1.4.1](https://html2canvas.hertzen.com/) from CDN into `iframe.contentDocument` (the outer page already has it, included via `<script>` in [user.html](public/user.html)).
 3. `captureFrame()` — `html2canvas` with `useCORS`, `allowTaint`, viewport area (`scrollX/scrollY` + `innerWidth/innerHeight`).
 4. `canvasToBase64Jpeg()` — downscales to **1600 px** width, JPEG quality **0.7**, base64.
-5. `POST /api/gemini/solve` → answer is rendered into `.gemini-result`.
+5. `POST /api/gemini/solve` with just `imageBase64`. The active prompt, active model, and PDF attachments are pulled from the user record on the server.
+6. The answer is rendered into `.gemini-result`.
+
+Server side ([api.ts](api.ts) → [gemini.ts](gemini.ts)):
+- Picks the user's active prompt (fallback — first in the list, then `DEFAULT_PROMPT_TEXT`).
+- Builds the model order: `activeModel` first, then the rest of `enabledModels`. If nothing is enabled — falls back to `gemini-2.5-flash`.
+- Loads every `user_files` record for the user (any type — PDF / image / text / audio / video) and passes them into `solveWithGemini`, which calls `client.files.upload` (with URI cache per key).
 
 Guards: a concurrent call is blocked by the `busy` flag; the button is disabled while a request is in flight.
 
@@ -272,18 +312,24 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 | POST | `/api/login/:id/quick` | `{char}` — quick login by first character |
 | POST | `/api/admin/login` | Same as `/api/login`, rejects non-admins |
 | POST | `/api/logout` | — |
-| GET  | `/api/me` | Current user |
-| GET  | `/api/config` | `{ proxyPath, iframePermissions }` |
+| GET  | `/api/me` | Current user (includes `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
+| GET  | `/api/config` | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }` |
 | GET  | `/api/users/by-name/:name` | `{ id, name, targetUrl }` |
 
 ### User (session required)
 
-| Method | Path | Body |
+| Method | Path | Body / response |
 | --- | --- | --- |
 | PUT | `/api/me/url` | `{ url: string }` |
 | PUT | `/api/me/password` | `{ password: string }` |
 | PUT | `/api/me/api-keys` | `{ apiKeys: string[] }` |
-| POST | `/api/gemini/solve` | `{ imageBase64: string }` → `{ answer }` |
+| PUT | `/api/me/prompts` | `{ prompts: {id,name,text}[], activePromptId?: string }` |
+| PUT | `/api/me/models` | `{ enabledModels: string[], activeModel?: string }` (filtered against `KNOWN_MODELS`) |
+| PUT | `/api/me/active-model` | `{ activeModel: string }` — must be in `enabledModels` |
+| GET | `/api/me/files` | `[{id, name, mime, size, createdAt}]` |
+| POST | `/api/me/files` | `{ name, mime, dataBase64 }` → file metadata (30 MB cap) |
+| DELETE | `/api/me/files/:id` | `204`, also clears the URI cache in `gemini.ts` |
+| POST | `/api/gemini/solve` | `{ imageBase64: string }` → `{ answer }`. Prompt / models / PDFs come from the DB |
 
 ### Admin (`isAdmin=true`)
 
@@ -324,7 +370,7 @@ npm start
 
 ## Dependencies
 
-- **Runtime**: [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3)
+- **Runtime**: [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3), [`@google/genai`](https://www.npmjs.com/package/@google/genai) — the official Gemini API SDK (Files API + `generateContent`)
 - **Dev/build**: `tsx`, `typescript`, `@types/node`, `@types/better-sqlite3`
 - **Client CDN** (no npm): [html2canvas 1.4.1](https://cdnjs.com/libraries/html2canvas) — for the iframe screenshot
 
