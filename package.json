@@ -9,8 +9,8 @@
     "build:assets": "npm run build:html && npm run build:css",
     "build:html": "tsx build-html.ts",
     "build:html:watch": "tsx build-html.ts --watch",
-    "build:css": "sass public/style.scss public/style.css",
-    "build:css:watch": "sass --watch public/style.scss:public/style.css",
+    "build:css": "sass public/style.scss public/static/style.css",
+    "build:css:watch": "sass --watch public/style.scss:public/static/style.css",
     "create-admin": "tsx create-admin.ts"
   },
   "prettier": {
