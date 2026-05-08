@@ -5,24 +5,17 @@ import * as path from 'node:path';
 import { URL } from 'node:url';
 
 import { handleApi } from './api';
-import { getSessionUserId, parseCookie, SESSION_COOKIE_NAME } from './session';
+import { getSessionUserId, parseCookie } from './session';
 import { getUserById } from './db';
 import { environment } from './environments/environment';
-
-const PUBLIC_DIR = path.join(process.cwd(), 'public');
-const PROXY_PREFIX = '/_p';
-const PREVIEW_RE = /^\/_p\/(\d+)(\/.*)?$/;
-const PREVIEW_COOKIE = 'uix_preview';
-
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.png': 'image/png',
-};
+import {
+  MIME,
+  PREVIEW_COOKIE,
+  PREVIEW_RE,
+  PROXY_PREFIX,
+  PUBLIC_DIR,
+  SESSION_COOKIE_NAME,
+} from './models/constants';
 
 function serveFile(res: http.ServerResponse, file: string): void {
   fs.stat(file, (err, stat) => {

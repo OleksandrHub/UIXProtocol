@@ -3,13 +3,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   addUserFile,
   createUser,
-  DEFAULT_PROMPT_TEXT,
   deleteUser,
   deleteUserFile,
   getUserById,
   getUserByName,
   getUserFiles,
-  KNOWN_MODELS,
   listUserFiles,
   listUsers,
   updateUser,
@@ -17,7 +15,8 @@ import {
   verifyPasswordById,
   verifyPasswordByName,
 } from './db';
-import type { UserPrompt } from './db';
+import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from './models/constants';
+import type { UserPrompt } from './models/types';
 import { clearSession, clearSessionsForUser, getSessionUserId, setSession } from './session';
 import { environment } from './environments/environment';
 import {

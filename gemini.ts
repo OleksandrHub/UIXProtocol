@@ -1,15 +1,13 @@
 import { GoogleGenAI, createPartFromUri } from '@google/genai';
-import type { UserFile } from './db';
 
-const REQUEST_TIMEOUT_MS = 20000;
+import { FILE_TTL_MS, REQUEST_TIMEOUT_MS } from './models/constants';
+import type { PreloadResult, SolveOptions, UserFile } from './models/types';
 
 interface UploadedFile {
   uri: string;
   mimeType: string;
   expiresAt: number;
 }
-
-const FILE_TTL_MS = 40 * 60 * 60 * 1000;
 
 const uploadCache = new Map<string, UploadedFile>();
 
@@ -78,14 +76,6 @@ function parseResultText(text: string): string {
   });
 
   return (conciseAnswer ?? lines[0] ?? '0').slice(0, 60);
-}
-
-interface SolveOptions {
-  apiKeys: string[];
-  imageBase64: string;
-  prompt: string;
-  models: string[];
-  files: UserFile[];
 }
 
 async function callOnce(
@@ -171,12 +161,6 @@ export function getCachedFileIds(apiKey: string): Set<number> {
     if (Number.isFinite(id)) ids.add(id);
   }
   return ids;
-}
-
-export interface PreloadResult {
-  cached: number;
-  total: number;
-  errors: Array<{ fileId: number; apiKey: string; message: string }>;
 }
 
 export async function preloadFiles(
