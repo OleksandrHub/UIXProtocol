@@ -6,6 +6,11 @@
 /out-tsc
 /bazel-out
 
+# Built assets (sources live in /pages and /styles, output goes to /public)
+/public/*.html
+/public/style.css
+/public/style.css.map
+
 # Node
 /node_modules
 npm-debug.log
