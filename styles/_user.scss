@@ -1,0 +1,140 @@
+.page-user {
+  height: 100vh;
+  overflow: hidden;
+
+  &.locked .frame {
+    pointer-events: none;
+  }
+}
+
+.modal-quicklogin {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  pointer-events: none;
+  z-index: 90;
+
+  &[hidden] {
+    display: none;
+  }
+
+  input {
+    pointer-events: auto;
+    width: 3.5rem;
+    padding: .55rem .6rem;
+    font: inherit;
+    font-size: 1rem;
+    text-align: center;
+    letter-spacing: .15em;
+    background: rgba(0, 0, 0, .05);
+    border: 1px solid rgba(255, 255, 255, .55);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, .55);
+    outline: none;
+    caret-color: rgba(255, 255, 255, .85);
+    transition: border-color .15s, color .15s;
+
+    &::placeholder {
+      color: rgba(255, 255, 255, .35);
+    }
+
+    &:focus {
+      border-color: rgba(255, 255, 255, .95);
+      color: rgba(255, 255, 255, .45);
+    }
+
+    &.wrong {
+      border-color: rgba(255, 90, 90, .4);
+      color: rgba(255, 90, 90, .45);
+    }
+
+    &.shake {
+      animation: shake .3s;
+    }
+  }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+.frame {
+  width: 100vw;
+  height: 100dvh;
+  border: 0;
+  display: block;
+}
+
+.bar-trigger {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  cursor: pointer;
+  z-index: 90;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem 60px .5rem 1rem;
+  background: #1f1f23;
+  color: #eee;
+  font-size: .875rem;
+  transform: translateY(-100%);
+  transition: transform .2s ease;
+  z-index: 80;
+
+  &[hidden] {
+    display: none;
+  }
+
+  &.show {
+    transform: translateY(0);
+  }
+
+  .user {
+    font-weight: 600;
+    margin-right: auto;
+  }
+
+  a,
+  button {
+    color: inherit;
+    background: transparent;
+    border: 1px solid #555;
+    padding: .25rem .75rem;
+    border-radius: 4px;
+    text-decoration: none;
+    font: inherit;
+
+    &:hover {
+      background: #2a2a30;
+    }
+  }
+}
