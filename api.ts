@@ -18,7 +18,7 @@ import {
   verifyPasswordByName,
 } from './db';
 import type { UserPrompt } from './db';
-import { clearSession, getSessionUserId, setSession } from './session';
+import { clearSession, clearSessionsForUser, getSessionUserId, setSession } from './session';
 import { environment } from './environments/environment';
 import {
   getCachedFileIds,
@@ -518,7 +518,10 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         return true;
       }
       if (req.method === 'DELETE') {
-        if (deleteUser(id)) sendNoContent(res);
+        if (deleteUser(id)) {
+          clearSessionsForUser(id);
+          sendNoContent(res);
+        }
         else sendJson(res, 404, { error: 'not found' });
         return true;
       }

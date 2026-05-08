@@ -43,6 +43,10 @@ export function setSession(res: ServerResponse, userId: number): void {
   );
 }
 
+export function clearSessionsForUser(userId: number): void {
+  for (const [id, s] of sessions) if (s.userId === userId) sessions.delete(id);
+}
+
 export function clearSession(req: IncomingMessage, res: ServerResponse): void {
   const id = parseCookie(req, SESSION_COOKIE_NAME);
   if (id) sessions.delete(id);
