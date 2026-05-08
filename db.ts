@@ -5,12 +5,64 @@ import Database from 'better-sqlite3';
 const DB_PATH = path.join(process.cwd(), 'users.db');
 const SCRYPT_KEYLEN = 64;
 
+export interface UserPrompt {
+  id: string;
+  name: string;
+  text: string;
+}
+
+export interface UserFileMeta {
+  id: number;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: number;
+}
+
+export interface UserFile extends UserFileMeta {
+  data: Buffer;
+}
+
+export const KNOWN_MODELS = [
+  'gemini-3-pro-preview',
+  'gemini-3-flash-preview',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+] as const;
+
+export const DEFAULT_PROMPT_TEXT = `You are an expert test solver. Analyze the screenshot carefully.
+
+TASK: Find and solve ALL questions/tests visible on the screen.
+
+RULES:
+- Single choice: output the number (e.g., 2)
+- Multiple correct answers: comma-separated (e.g., 1,3,4)
+- Multiple questions on screen: semicolon-separated (e.g., 1;3;2)
+- Matching: pairs (e.g., 1-б,2-а,3-в)
+- Open-ended: short answer word/phrase in Ukrainian
+- True/False: Так or Ні
+
+IMPORTANT:
+- Read ALL text carefully before answering
+- If reference materials are provided (PDFs, images, text, etc.), use them to find the correct answer
+- Answer based on the content, not guessing
+- Output ONLY in format below, nothing else
+
+FORMAT: Відповідь: [your answer]
+
+Example: Відповідь: 3`;
+
 export interface User {
   id: number;
   name: string;
   apiKeys: string[];
   isAdmin: boolean;
   targetUrl: string;
+  prompts: UserPrompt[];
+  activePromptId: string;
+  enabledModels: string[];
+  activeModel: string;
 }
 
 export interface CreateUserInput {
@@ -27,6 +79,10 @@ export interface UpdateUserInput {
   apiKeys?: string[];
   isAdmin?: boolean;
   targetUrl?: string;
+  prompts?: UserPrompt[];
+  activePromptId?: string;
+  enabledModels?: string[];
+  activeModel?: string;
 }
 
 interface UserRow {
@@ -37,6 +93,10 @@ interface UserRow {
   api_keys: string;
   is_admin: number;
   target_url: string;
+  prompts: string;
+  active_prompt_id: string;
+  enabled_models: string;
+  active_model: string;
 }
 
 const db = new Database(DB_PATH);
@@ -54,9 +114,36 @@ db.exec(`
 `);
 
 const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
-if (!userCols.some((c) => c.name === 'password_first')) {
+const hasCol = (name: string): boolean => userCols.some((c) => c.name === name);
+if (!hasCol('password_first')) {
   db.exec("ALTER TABLE users ADD COLUMN password_first TEXT NOT NULL DEFAULT ''");
 }
+if (!hasCol('prompts')) {
+  db.exec("ALTER TABLE users ADD COLUMN prompts TEXT NOT NULL DEFAULT '[]'");
+}
+if (!hasCol('active_prompt_id')) {
+  db.exec("ALTER TABLE users ADD COLUMN active_prompt_id TEXT NOT NULL DEFAULT ''");
+}
+if (!hasCol('enabled_models')) {
+  db.exec("ALTER TABLE users ADD COLUMN enabled_models TEXT NOT NULL DEFAULT '[]'");
+}
+if (!hasCol('active_model')) {
+  db.exec("ALTER TABLE users ADD COLUMN active_model TEXT NOT NULL DEFAULT ''");
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_files_user ON user_files(user_id);
+`);
 
 function firstChar(s: string): string {
   return [...s][0] ?? '';
@@ -77,13 +164,28 @@ function verifyHash(password: string, stored: string): boolean {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
+function safeParseArray<T>(s: string): T[] {
+  try {
+    const parsed = JSON.parse(s);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function rowToUser(row: UserRow): User {
+  const prompts = safeParseArray<UserPrompt>(row.prompts);
+  const enabledModels = safeParseArray<string>(row.enabled_models);
   return {
     id: row.id,
     name: row.name,
-    apiKeys: JSON.parse(row.api_keys) as string[],
+    apiKeys: safeParseArray<string>(row.api_keys),
     isAdmin: row.is_admin === 1,
     targetUrl: row.target_url,
+    prompts,
+    activePromptId: row.active_prompt_id ?? '',
+    enabledModels,
+    activeModel: row.active_model ?? '',
   };
 }
 
@@ -128,6 +230,22 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
   if (input.targetUrl !== undefined) {
     sets.push('target_url = ?');
     params.push(input.targetUrl);
+  }
+  if (input.prompts !== undefined) {
+    sets.push('prompts = ?');
+    params.push(JSON.stringify(input.prompts));
+  }
+  if (input.activePromptId !== undefined) {
+    sets.push('active_prompt_id = ?');
+    params.push(input.activePromptId);
+  }
+  if (input.enabledModels !== undefined) {
+    sets.push('enabled_models = ?');
+    params.push(JSON.stringify(input.enabledModels));
+  }
+  if (input.activeModel !== undefined) {
+    sets.push('active_model = ?');
+    params.push(input.activeModel);
   }
   if (!sets.length) return getUserById(id);
   params.push(id);
@@ -183,4 +301,72 @@ export function verifyFirstCharById(id: number, char: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
   if (!row || !row.password_first) return null;
   return row.password_first === char ? rowToUser(row) : null;
+}
+
+interface UserFileRow {
+  id: number;
+  user_id: number;
+  name: string;
+  mime: string;
+  size: number;
+  data: Buffer;
+  created_at: number;
+}
+
+function rowToFileMeta(row: UserFileRow): UserFileMeta {
+  return {
+    id: row.id,
+    name: row.name,
+    mime: row.mime,
+    size: row.size,
+    createdAt: row.created_at,
+  };
+}
+
+export function listUserFiles(userId: number): UserFileMeta[] {
+  const rows = db
+    .prepare(
+      'SELECT id, user_id, name, mime, size, created_at FROM user_files WHERE user_id = ? ORDER BY id'
+    )
+    .all(userId) as UserFileRow[];
+  return rows.map(rowToFileMeta);
+}
+
+export function getUserFile(userId: number, fileId: number): UserFile | null {
+  const row = db
+    .prepare('SELECT * FROM user_files WHERE id = ? AND user_id = ?')
+    .get(fileId, userId) as UserFileRow | undefined;
+  if (!row) return null;
+  return { ...rowToFileMeta(row), data: row.data };
+}
+
+export function getUserFiles(userId: number): UserFile[] {
+  const rows = db
+    .prepare('SELECT * FROM user_files WHERE user_id = ? ORDER BY id')
+    .all(userId) as UserFileRow[];
+  return rows.map((row) => ({ ...rowToFileMeta(row), data: row.data }));
+}
+
+export function addUserFile(
+  userId: number,
+  name: string,
+  mime: string,
+  data: Buffer
+): UserFileMeta {
+  const info = db
+    .prepare(
+      'INSERT INTO user_files (user_id, name, mime, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(userId, name, mime, data.length, data, Date.now());
+  const row = db
+    .prepare('SELECT id, user_id, name, mime, size, created_at FROM user_files WHERE id = ?')
+    .get(Number(info.lastInsertRowid)) as UserFileRow;
+  return rowToFileMeta(row);
+}
+
+export function deleteUserFile(userId: number, fileId: number): boolean {
+  const info = db
+    .prepare('DELETE FROM user_files WHERE id = ? AND user_id = ?')
+    .run(fileId, userId);
+  return info.changes > 0;
 }

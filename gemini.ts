@@ -1,40 +1,56 @@
-const PROMPT = `You are an expert test solver. Analyze the screenshot carefully.
-
-TASK: Find and solve ALL questions/tests visible on the screen.
-
-RULES:
-- Single choice: output the number (e.g., 2)
-- Multiple correct answers: comma-separated (e.g., 1,3,4)
-- Multiple questions on screen: semicolon-separated (e.g., 1;3;2)
-- Matching: pairs (e.g., 1-б,2-а,3-в)
-- Open-ended: short answer word/phrase in Ukrainian
-- True/False: Так or Ні
-
-IMPORTANT:
-- Read ALL text carefully before answering
-- Answer based on the content, not guessing
-- Output ONLY in format below, nothing else
-
-FORMAT: Відповідь: [your answer]
-
-Example: Відповідь: 3`;
-
-const MODELS = [
-  'gemini-2.5-flash',
-  // 'gemini-2.5-flash-lite',
-  // 'gemini-2.5-pro',
-  //'gemini-3-flash-preview',
-];
+import { GoogleGenAI, createPartFromUri } from '@google/genai';
+import type { UserFile } from './db';
 
 const REQUEST_TIMEOUT_MS = 20000;
 
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
-  error?: { message?: string };
+interface UploadedFile {
+  uri: string;
+  mimeType: string;
+  expiresAt: number;
+}
+
+const FILE_TTL_MS = 40 * 60 * 60 * 1000;
+
+const uploadCache = new Map<string, UploadedFile>();
+
+function cacheKey(apiKey: string, fileId: number): string {
+  return `${apiKey}::${fileId}`;
+}
+
+function makeClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      timeout: REQUEST_TIMEOUT_MS,
+      retryOptions: { attempts: 1 },
+    },
+  });
+}
+
+async function uploadFileForKey(
+  client: GoogleGenAI,
+  apiKey: string,
+  file: UserFile
+): Promise<UploadedFile> {
+  const key = cacheKey(apiKey, file.id);
+  const cached = uploadCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached;
+
+  const blob = new Blob([new Uint8Array(file.data)], { type: file.mime });
+  const uploaded = await client.files.upload({
+    file: blob,
+    config: { mimeType: file.mime, displayName: file.name },
+  });
+  if (!uploaded.uri || !uploaded.mimeType) {
+    throw new Error(`upload returned no uri for ${file.name}`);
+  }
+  const entry: UploadedFile = {
+    uri: uploaded.uri,
+    mimeType: uploaded.mimeType,
+    expiresAt: Date.now() + FILE_TTL_MS,
+  };
+  uploadCache.set(key, entry);
+  return entry;
 }
 
 function parseResultText(text: string): string {
@@ -64,66 +80,126 @@ function parseResultText(text: string): string {
   return (conciseAnswer ?? lines[0] ?? '0').slice(0, 60);
 }
 
-async function callGemini(
-  apiKey: string,
-  model: string,
-  imageBase64: string
-): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: PROMPT },
-          { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
-        ],
-      },
-    ],
-    generationConfig: {
-      thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 },
-    },
-  };
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    const data = (await res.json()) as GeminiResponse;
-    if (!res.ok) {
-      throw new Error(data?.error?.message ?? `HTTP ${res.status}`);
-    }
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    if (!text.trim()) throw new Error('empty response');
-    return text;
-  } finally {
-    clearTimeout(timer);
-  }
+interface SolveOptions {
+  apiKeys: string[];
+  imageBase64: string;
+  prompt: string;
+  models: string[];
+  files: UserFile[];
 }
 
-export async function solveWithGemini(
-  apiKeys: string[],
-  imageBase64: string
+async function callOnce(
+  apiKey: string,
+  model: string,
+  options: SolveOptions
 ): Promise<string> {
+  const client = makeClient(apiKey);
+
+  const fileParts = [];
+  for (const f of options.files) {
+    const uploaded = await uploadFileForKey(client, apiKey, f);
+    fileParts.push(createPartFromUri(uploaded.uri, uploaded.mimeType));
+  }
+
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        { text: options.prompt },
+        ...fileParts,
+        { inlineData: { mimeType: 'image/jpeg', data: options.imageBase64 } },
+      ],
+    },
+  ];
+
+  const response = await client.models.generateContent({
+    model,
+    config: {
+      thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 },
+    },
+    contents,
+  });
+
+  const text = response?.text ?? '';
+  if (!text.trim()) throw new Error('empty response');
+  return text;
+}
+
+export async function solveWithGemini(options: SolveOptions): Promise<string> {
+  if (!options.models.length) throw new Error('no models enabled');
+
+  const orderedModels = [...options.models];
   let lastError: unknown;
-  for (const model of MODELS) {
-    for (const key of apiKeys) {
+
+  for (const model of orderedModels) {
+    for (const apiKey of options.apiKeys) {
       try {
-        const text = await callGemini(key, model, imageBase64);
+        const text = await callOnce(apiKey, model, options);
         return parseResultText(text);
       } catch (e) {
         lastError = e;
         console.error(
-          `[Gemini] ${model} key ${key.slice(0, 8)}…: ${(e as Error).message}`
+          `[Gemini] ${model} key ${apiKey.slice(0, 8)}…: ${(e as Error).message}`
         );
+        for (const key of [...uploadCache.keys()]) {
+          if (key.startsWith(`${apiKey}::`)) uploadCache.delete(key);
+        }
       }
     }
   }
   throw lastError ?? new Error('all keys/models failed');
+}
+
+export function invalidateUploadsForUser(fileIds: number[]): void {
+  for (const id of fileIds) {
+    for (const key of [...uploadCache.keys()]) {
+      if (key.endsWith(`::${id}`)) uploadCache.delete(key);
+    }
+  }
+}
+
+export function getCachedFileIds(apiKey: string): Set<number> {
+  const ids = new Set<number>();
+  const prefix = `${apiKey}::`;
+  for (const [key, entry] of uploadCache) {
+    if (!key.startsWith(prefix)) continue;
+    if (entry.expiresAt <= Date.now()) {
+      uploadCache.delete(key);
+      continue;
+    }
+    const id = Number(key.slice(prefix.length));
+    if (Number.isFinite(id)) ids.add(id);
+  }
+  return ids;
+}
+
+export interface PreloadResult {
+  cached: number;
+  total: number;
+  errors: Array<{ fileId: number; apiKey: string; message: string }>;
+}
+
+export async function preloadFiles(
+  apiKeys: string[],
+  files: UserFile[]
+): Promise<PreloadResult> {
+  const total = apiKeys.length * files.length;
+  let cached = 0;
+  const errors: PreloadResult['errors'] = [];
+  for (const apiKey of apiKeys) {
+    const client = makeClient(apiKey);
+    for (const file of files) {
+      try {
+        await uploadFileForKey(client, apiKey, file);
+        cached++;
+      } catch (e) {
+        errors.push({
+          fileId: file.id,
+          apiKey: apiKey.slice(0, 8),
+          message: (e as Error).message,
+        });
+      }
+    }
+  }
+  return { cached, total, errors };
 }

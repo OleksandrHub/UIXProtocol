@@ -13,6 +13,7 @@
     "singleQuote": true
   },
   "dependencies": {
+    "@google/genai": "^2.0.0",
     "better-sqlite3": "^12.4.1"
   },
   "devDependencies": {
