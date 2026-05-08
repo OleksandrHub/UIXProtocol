@@ -1,5 +1,5 @@
 export const environment = {
-  production: false,
+  production: true,
   defaultTarget: 'https://dl.tntu.edu.ua',
   port: 3000,
   sessionTtlMs: 60 * 60 * 1000,
