@@ -1,9 +1,8 @@
 import * as crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { SESSION_COOKIE_NAME } from './models/constants';
 import { environment } from './environments/environment';
-
-export const SESSION_COOKIE_NAME = 'uix_session';
 
 const sessions = new Map<string, { userId: number; expiresAt: number }>();
 

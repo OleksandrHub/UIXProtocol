@@ -1,89 +1,15 @@
 import * as crypto from 'node:crypto';
-import * as path from 'node:path';
 import Database from 'better-sqlite3';
 
-const DB_PATH = path.join(process.cwd(), 'users.db');
-const SCRYPT_KEYLEN = 64;
-
-export interface UserPrompt {
-  id: string;
-  name: string;
-  text: string;
-}
-
-export interface UserFileMeta {
-  id: number;
-  name: string;
-  mime: string;
-  size: number;
-  createdAt: number;
-}
-
-export interface UserFile extends UserFileMeta {
-  data: Buffer;
-}
-
-export const KNOWN_MODELS = [
-  'gemini-3-pro-preview',
-  'gemini-3-flash-preview',
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-] as const;
-
-export const DEFAULT_PROMPT_TEXT = `You are an expert test solver. Analyze the screenshot carefully.
-
-TASK: Find and solve ALL questions/tests visible on the screen.
-
-RULES:
-- Single choice: output the number (e.g., 2)
-- Multiple correct answers: comma-separated (e.g., 1,3,4)
-- Multiple questions on screen: semicolon-separated (e.g., 1;3;2)
-- Matching: pairs (e.g., 1-б,2-а,3-в)
-- Open-ended: short answer word/phrase in Ukrainian
-- True/False: Так or Ні
-
-IMPORTANT:
-- Read ALL text carefully before answering
-- If reference materials are provided (PDFs, images, text, etc.), use them to find the correct answer
-- Answer based on the content, not guessing
-- Output ONLY in format below, nothing else
-
-FORMAT: Відповідь: [your answer]
-
-Example: Відповідь: 3`;
-
-export interface User {
-  id: number;
-  name: string;
-  apiKeys: string[];
-  isAdmin: boolean;
-  targetUrl: string;
-  prompts: UserPrompt[];
-  activePromptId: string;
-  enabledModels: string[];
-  activeModel: string;
-}
-
-export interface CreateUserInput {
-  name: string;
-  password: string;
-  apiKeys?: string[];
-  isAdmin?: boolean;
-  targetUrl?: string;
-}
-
-export interface UpdateUserInput {
-  name?: string;
-  password?: string;
-  apiKeys?: string[];
-  isAdmin?: boolean;
-  targetUrl?: string;
-  prompts?: UserPrompt[];
-  activePromptId?: string;
-  enabledModels?: string[];
-  activeModel?: string;
-}
+import { DB_PATH, SCRYPT_KEYLEN } from './models/constants';
+import type {
+  CreateUserInput,
+  UpdateUserInput,
+  User,
+  UserFile,
+  UserFileMeta,
+  UserPrompt,
+} from './models/types';
 
 interface UserRow {
   id: number;

@@ -7,8 +7,8 @@
     "dev": "npm run build:assets && tsx server.ts",
     "build": "npm run build:assets && tsc",
     "build:assets": "npm run build:html && npm run build:css",
-    "build:html": "tsx build-html.ts",
-    "build:html:watch": "tsx build-html.ts --watch",
+    "build:html": "tsx models/build-html.ts",
+    "build:html:watch": "tsx models/build-html.ts --watch",
     "build:css": "sass public/style.scss public/static/style.css",
     "build:css:watch": "sass --watch public/style.scss:public/static/style.css",
     "create-admin": "tsx create-admin.ts"
@@ -29,6 +29,6 @@
     "posthtml-include": "^2.0.1",
     "sass": "^1.99.0",
     "tsx": "^4.21.0",
-    "typescript": "~5.9.2"
+    "typescript": "^6.0.3"
   }
 }
