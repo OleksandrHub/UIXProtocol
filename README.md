@@ -98,7 +98,7 @@ npm run dev
 
 - `hashPassword(password)` / `verifyHash(password, stored)` — scrypt (`node:crypto`), сіль 16 байт, ключ 64 байти, формат `scrypt$<salt-hex>$<hash-hex>`. Перевірка через `crypto.timingSafeEqual`.
 - `firstChar(s)` — береться через `[...s][0]`, тобто коректно обробляє Unicode-символи (емодзі тощо).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD над `users`. `password_first` записується одночасно з `password_hash`. `updateUser` приймає також `prompts`, `activePromptId`, `enabledModels`, `activeModel`.
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD над `users`. `password_first` записується одночасно з `password_hash`. `updateUser` приймає також `prompts`, `activePromptId`, `enabledModels`, `activeModel`. При створенні `id` береться як найменший вільний, щоб заповнювати прогалини після видалень.
 - `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` — CRUD для прикріплених файлів (тип не обмежений: PDF, зображення, текст, аудіо, відео).
 - `verifyPasswordById` / `verifyPasswordByName` — повна перевірка пароля; на успіху викликає `backfillFirstChar` (якщо в БД ще немає `password_first`).
 - `verifyFirstCharById` — порівнює один символ із `password_first` (без хешу). Працює лише якщо колонка вже заповнена.
@@ -140,6 +140,7 @@ created_at  INTEGER NOT NULL
 - `setSession(res, userId)` — генерує 24-байтний `randomBytes`, base64url, кладе в `Map<sessionId, {userId, expiresAt}>`.
 - `getSessionUserId(req)` — читає cookie, перевіряє TTL, видаляє протерміновані.
 - `clearSession(req, res)` — видаляє запис із Map і скидає cookie через `Max-Age=0`.
+- `clearSessionsForUser(userId)` — очищає всі активні сесії користувача (викликається при видаленні).
 - Кожні 60 секунд вичищаються прострочені сесії (`setInterval(...).unref()`).
 
 ### `gemini.ts`

@@ -98,7 +98,7 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 
 - `hashPassword(password)` / `verifyHash(password, stored)` — scrypt (`node:crypto`), 16-byte salt, 64-byte key, format `scrypt$<salt-hex>$<hash-hex>`. Verification uses `crypto.timingSafeEqual`.
 - `firstChar(s)` — `[...s][0]`, so it correctly handles Unicode codepoints (emoji, etc.).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`.
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`. On create, the smallest free `id` is chosen to reuse gaps after deletions.
 - `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` — CRUD for attached files (type is not restricted: PDF, images, text, audio, video).
 - `verifyPasswordById` / `verifyPasswordByName` — full password verification; on success calls `backfillFirstChar` if the column is empty.
 - `verifyFirstCharById` — compares one character against `password_first` (no hashing). Only works once the column is populated.
@@ -140,6 +140,7 @@ All new columns are added via `ALTER TABLE ADD COLUMN` at runtime — old DBs ar
 - `setSession(res, userId)` — generates 24 random bytes (base64url) and stores `Map<sessionId, {userId, expiresAt}>`.
 - `getSessionUserId(req)` — reads the cookie, checks TTL, evicts expired entries.
 - `clearSession(req, res)` — removes the entry and resets the cookie via `Max-Age=0`.
+- `clearSessionsForUser(userId)` — clears all active sessions for a user (called on delete).
 - A `setInterval(...).unref()` sweeps expired sessions every 60 s.
 
 ### `gemini.ts`
