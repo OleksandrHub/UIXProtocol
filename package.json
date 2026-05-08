@@ -4,8 +4,13 @@
   "private": true,
   "scripts": {
     "start": "npm run build && node dist/server.js",
-    "dev": "tsx server.ts",
-    "build": "tsc",
+    "dev": "npm run build:assets && tsx server.ts",
+    "build": "npm run build:assets && tsc",
+    "build:assets": "npm run build:html && npm run build:css",
+    "build:html": "tsx build-html.ts",
+    "build:html:watch": "tsx build-html.ts --watch",
+    "build:css": "sass public/style.scss public/style.css",
+    "build:css:watch": "sass --watch public/style.scss:public/style.css",
     "create-admin": "tsx create-admin.ts"
   },
   "prettier": {
@@ -19,6 +24,10 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",
+    "posthtml": "^0.16.7",
+    "posthtml-expressions": "^1.11.4",
+    "posthtml-include": "^2.0.1",
+    "sass": "^1.99.0",
     "tsx": "^4.21.0",
     "typescript": "~5.9.2"
   }

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <title id="title">User</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" id="favicon" href="/_p/favicon.ico" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  </head>
+  <body class="page-user">
+    <div class="bar-trigger" id="barTrigger" hidden></div>
+    <header class="bar" id="bar" hidden>
+      <span class="user" id="userName">…</span>
+      <button type="button" id="settingsBtn">Налаштування</button>
+      <a id="adminLink" href="/admin" hidden>Адмін</a>
+      <button type="button" id="logoutBtn">Вихід</button>
+    </header>
+    <iframe id="frame" class="frame" frameborder="0"></iframe>
+
+    <div class="gemini-panel" id="geminiPanel" hidden>
+      <button type="button" id="screenshotBtn" title="Зробити скріншот і надіслати до Gemini">
+        S
+      </button>
+    </div>
+
+    <div class="files-status" id="filesStatus" hidden>
+      <button
+        type="button"
+        id="filesStatusBtn"
+        class="files-status__btn"
+        title="Натисніть, щоб прогріти файли в Gemini"
+      >
+        <span class="files-status__icon" id="filesStatusIcon">📎</span>
+        <span class="files-status__text" id="filesStatusText">—</span>
+      </button>
+      <button
+        type="button"
+        id="filesStatusClose"
+        class="files-status__close"
+        title="Сховати індикатор"
+      >
+        ×
+      </button>
+    </div>
+
+    <div class="gemini-result" id="geminiResult" hidden></div>
+    <div class="model-toast" id="modelToast" hidden></div>
+
+    <form class="modal-quicklogin" id="loginForm" hidden autocomplete="off">
+      <input id="loginPassword" type="password" autocomplete="current-password" required />
+    </form>
+
+    <div class="modal" id="settings" hidden>
+      <div class="modal__card modal__card--wide">
+        <h2>Налаштування</h2>
+        <nav class="tabs" id="settingsTabs">
+          <button type="button" class="tab is-active" data-tab="general">Основні</button>
+          <button type="button" class="tab" data-tab="prompts">Промти</button>
+          <button type="button" class="tab" data-tab="models">Моделі</button>
+          <button type="button" class="tab" data-tab="files">Файли</button>
+          <button type="button" class="tab" data-tab="appearance">Вигляд</button>
+        </nav>
+
+        <section class="tab-panel" data-panel="general">
+          <label
+            >URL сайту
+            <input id="urlInput" type="text" placeholder="https://example.com" />
+          </label>
+          <label
+            >API ключі (по одному на рядок)
+            <textarea id="keysInput" rows="4"></textarea>
+          </label>
+          <label
+            >Новий пароль (порожньо — не змінювати)
+            <input id="passInput" type="password" />
+          </label>
+        </section>
+
+        <section class="tab-panel" data-panel="prompts" hidden>
+          <div class="prompts" id="promptsList"></div>
+          <button type="button" class="btn-secondary" id="promptAddBtn">+ Додати промт</button>
+        </section>
+
+        <section class="tab-panel" data-panel="models" hidden>
+          <p class="hint">
+            Активна модель перемикається на наступну з обраних через <kbd>Alt</kbd>+<kbd>C</kbd>.
+          </p>
+          <div class="models" id="modelsList"></div>
+        </section>
+
+        <section class="tab-panel" data-panel="files" hidden>
+          <p class="hint">
+            Файли (PDF, зображення, текст, аудіо, відео тощо) передаються в Gemini як контекст разом
+            зі скріншотом.
+          </p>
+          <div class="files" id="filesList"></div>
+          <label class="file-add">
+            <input type="file" id="fileInput" multiple hidden />
+            <button type="button" class="btn-secondary" id="fileAddBtn">+ Прикріпити файл</button>
+          </label>
+        </section>
+
+        <section class="tab-panel" data-panel="appearance" hidden>
+          <h3>Відповідь Gemini</h3>
+          <div class="grid-2">
+            <label
+              >Шрифт
+              <input type="text" id="apResultFont" placeholder="system-ui" />
+            </label>
+            <label
+              >Розмір (px)
+              <input type="number" id="apResultSize" min="8" max="64" />
+            </label>
+            <label class="color-row"
+              >Колір тексту
+              <span class="color-row__inputs">
+                <input type="color" id="apResultColor" />
+                <input
+                  type="range"
+                  id="apResultColorOpacity"
+                  min="0"
+                  max="100"
+                  step="1"
+                  title="Прозорість тексту"
+                />
+                <output id="apResultColorOpacityOut" class="opacity-out">100%</output>
+              </span>
+            </label>
+            <label class="color-row"
+              >Колір фону
+              <span class="color-row__inputs">
+                <input type="color" id="apResultBg" />
+                <input
+                  type="range"
+                  id="apResultBgOpacity"
+                  min="0"
+                  max="100"
+                  step="1"
+                  title="Прозорість фону"
+                />
+                <output id="apResultBgOpacityOut" class="opacity-out">0%</output>
+              </span>
+            </label>
+          </div>
+
+          <h3>Кнопка S (скріншот)</h3>
+          <div class="grid-2">
+            <label
+              >Шрифт
+              <input type="text" id="apBtnFont" placeholder="system-ui" />
+            </label>
+            <label
+              >Розмір (px)
+              <input type="number" id="apBtnSize" min="8" max="64" />
+            </label>
+            <label class="color-row"
+              >Колір тексту
+              <span class="color-row__inputs">
+                <input type="color" id="apBtnColor" />
+                <input
+                  type="range"
+                  id="apBtnColorOpacity"
+                  min="0"
+                  max="100"
+                  step="1"
+                  title="Прозорість тексту"
+                />
+                <output id="apBtnColorOpacityOut" class="opacity-out">100%</output>
+              </span>
+            </label>
+            <label class="color-row"
+              >Колір фону
+              <span class="color-row__inputs">
+                <input type="color" id="apBtnBg" />
+                <input
+                  type="range"
+                  id="apBtnBgOpacity"
+                  min="0"
+                  max="100"
+                  step="1"
+                  title="Прозорість фону"
+                />
+                <output id="apBtnBgOpacityOut" class="opacity-out">0%</output>
+              </span>
+            </label>
+          </div>
+
+          <p class="hint">Прозорість 0% — повністю прозоро, 100% — без прозорості.</p>
+
+          <h3>Індикатори</h3>
+          <label class="check"
+            ><input type="checkbox" id="apShowFilesStatus" /> Показувати статус файлів (📎)</label
+          >
+          <label class="check"
+            ><input type="checkbox" id="apShowModelToast" /> Показувати тост моделі (зміна через
+            Alt+C)</label
+          >
+
+          <button type="button" class="btn-secondary" id="apResetBtn">Скинути до дефолтних</button>
+        </section>
+
+        <div class="error" id="settingsError"></div>
+        <div class="modal__actions">
+          <button type="button" id="settingsCancel">Скасувати</button>
+          <button type="button" id="settingsSave">Зберегти</button>
+        </div>
+      </div>
+    </div>
+
+    <template id="promptItemTpl">
+      <div class="prompt-item">
+        <div class="prompt-item__head">
+          <input type="radio" name="activePrompt" class="prompt-active" />
+          <input type="text" class="prompt-name" placeholder="Назва" />
+          <button type="button" class="prompt-delete" title="Видалити">×</button>
+        </div>
+        <textarea class="prompt-text" rows="6" placeholder="Текст промту"></textarea>
+      </div>
+    </template>
+
+    <script type="module" src="/static/user.js"></script>
+  </body>
+</html>
