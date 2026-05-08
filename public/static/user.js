@@ -254,7 +254,7 @@ function initGemini() {
       });
       showResult(answer || '—');
     } catch (e) {
-      showResult('Помилка: ' + (e?.message || e));
+      showResult('e');
     } finally {
       busy = false;
       btn.disabled = false;
