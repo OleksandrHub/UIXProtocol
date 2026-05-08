@@ -189,21 +189,42 @@ function rowToUser(row: UserRow): User {
   };
 }
 
+function nextUserId(): number {
+  // Pick the smallest free positive id so deletes free IDs are reused.
+  const row = db
+    .prepare(
+      `SELECT MIN(candidate) AS id
+       FROM (
+         SELECT 1 AS candidate
+         UNION ALL
+         SELECT id + 1 FROM users
+       ) candidates
+       WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = candidates.candidate)`
+    )
+    .get() as { id: number | null };
+  return Number(row?.id ?? 1);
+}
+
 export function createUser(input: CreateUserInput): User {
-  const stmt = db.prepare(
-    'INSERT INTO users (name, password_hash, password_first, api_keys, is_admin, target_url) VALUES (?, ?, ?, ?, ?, ?)'
+  const insert = db.prepare(
+    'INSERT INTO users (id, name, password_hash, password_first, api_keys, is_admin, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
-  const info = stmt.run(
-    input.name,
-    hashPassword(input.password),
-    firstChar(input.password),
-    JSON.stringify(input.apiKeys ?? []),
-    input.isAdmin ? 1 : 0,
-    input.targetUrl ?? ''
-  );
-  const user = getUserById(Number(info.lastInsertRowid));
-  if (!user) throw new Error('failed to read created user');
-  return user;
+  const create = db.transaction((payload: CreateUserInput) => {
+    const id = nextUserId();
+    insert.run(
+      id,
+      payload.name,
+      hashPassword(payload.password),
+      firstChar(payload.password),
+      JSON.stringify(payload.apiKeys ?? []),
+      payload.isAdmin ? 1 : 0,
+      payload.targetUrl ?? ''
+    );
+    const user = getUserById(id);
+    if (!user) throw new Error('failed to read created user');
+    return user;
+  });
+  return create(input);
 }
 
 export function updateUser(id: number, input: UpdateUserInput): User | null {
