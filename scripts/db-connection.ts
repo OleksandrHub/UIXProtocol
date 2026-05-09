@@ -47,3 +47,11 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_user_files_user ON user_files(user_id);
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_appearance (
+    user_id INTEGER PRIMARY KEY,
+    data TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+`);

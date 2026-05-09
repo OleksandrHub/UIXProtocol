@@ -30,7 +30,7 @@ npm run start
 - **Власні промти** з вибором активного — зберігаються в БД на користувача
 - **Перемикання моделей**: вмикати/вимикати моделі в налаштуваннях, активна модель циклічно перемикається через `Alt+X`
 - **Вкладення файлів**: будь-які файли (PDF, зображення, текст, аудіо, відео тощо) зберігаються в БД і автоматично передаються в Gemini як контекст разом зі скріншотом (через Files API + `createPartFromUri`)
-- **Кастомізація вигляду** (шрифт/розмір/колір/фон) для відповіді Gemini та кнопки `S` — зберігається в `localStorage`
+- **Кастомізація вигляду** (шрифт/розмір/колір/фон) для відповіді Gemini та кнопки `S` — зберігається в БД (таблиця `user_appearance`)
 - Гарячі клавіші `Alt+G/H/M/C` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
 - Невидимий клік-зон 44×44 у правому верхньому куті для відкриття меню
 - Назва вкладки та favicon автоматично підхоплюються з цільового сайту
@@ -63,11 +63,12 @@ npm run start
 **База даних (`better-sqlite3`):**
 | Файл | Призначення |
 | --- | --- |
-| [scripts/db.ts](scripts/db.ts) | Re-export із `db-users` і `db-files` |
+| [scripts/db.ts](scripts/db.ts) | Re-export із `db-users`, `db-files`, `db-appearance` |
 | [scripts/db-connection.ts](scripts/db-connection.ts) | Відкриття БД, схема, рантайм-міграції через `ALTER TABLE` |
 | [scripts/db-crypto.ts](scripts/db-crypto.ts) | scrypt-хешування паролів + `safeParseArray` |
 | [scripts/db-users.ts](scripts/db-users.ts) | CRUD над `users` + `verify*` |
 | [scripts/db-files.ts](scripts/db-files.ts) | CRUD над `user_files`, IDs реюзяться (як у `users`) |
+| [scripts/db-appearance.ts](scripts/db-appearance.ts) | `getAppearance`/`setAppearance` для `user_appearance` (JSON-blob на користувача) |
 
 **Gemini (через `@google/genai`):**
 | Файл | Призначення |
@@ -102,7 +103,7 @@ JS і HTML кожної сторінки розкладено за зоною в
 Розклад модулів `user.js`:
 
 - [public/js/user.js](public/js/user.js) — точка входу, `enterAuthed`, `installFavicon`, `installShortcuts`, `initLogin`, `initModelToast`, `shortModel`
-- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_KEY/DEFAULTS`, `loadAppearance`, `applyAppearance`, `hexToRgba`
+- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_DEFAULTS`, `loadAppearance` (in-memory cache), `fetchAppearance`/`saveAppearance` (через `GET/PUT /api/me/appearance`), `applyAppearance`, `hexToRgba`
 - [public/js/user-gemini.js](public/js/user-gemini.js) — `initGemini` (скрін iframe + виклик Gemini через `html2canvas`)
 - [public/js/user-files-status.js](public/js/user-files-status.js) — `initFilesStatus` (бейдж статусу файлів + кнопка прогріву)
 - [public/js/user-settings.js](public/js/user-settings.js) — `initSettings` (модалка з табами: основні, промти, моделі, файли, вигляд)
@@ -114,7 +115,7 @@ JS і HTML кожної сторінки розкладено за зоною в
 
 ### Збірка ассетів
 
-Сирці HTML і CSS лежать поза `public/` і компілюються в нього:
+Сирі HTML і CSS лежать поза `public/` і компілюються в нього:
 
 - **HTML**: `pages/*.html` із includes (`<include src="partials/...">`) → `public/*.html` через [scripts/build-html.ts](scripts/build-html.ts) (`posthtml` + `posthtml-include` + `posthtml-expressions`).
 - **CSS**: `styles/style.scss` (з `@use 'base'`, `'login'`, `'user'`, `'gemini'`, `'modal'`, `'admin'`, `'responsive'`) → `public/style.css` через `sass`.
@@ -201,6 +202,13 @@ data        BLOB NOT NULL
 created_at  INTEGER NOT NULL
 ```
 
+Схема `user_appearance` (один рядок на користувача, JSON-блоб із полями `resultFont/Size/Color/...`, `btnFont/Size/...`, `showFilesStatus`, `showModelToast`):
+
+```sql
+user_id  INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
+data     TEXT NOT NULL DEFAULT '{}'
+```
+
 Усі нові колонки додаються через `ALTER TABLE ADD COLUMN` у рантаймі — стара БД мігрується автоматично при першому запуску.
 
 ### `session.ts`
@@ -241,8 +249,8 @@ created_at  INTEGER NOT NULL
 - Реєструє `barTrigger` (невидимий клік-зон 44×44 у правому верхньому куті) → клік toggle меню.
 - Запит `GET /api/config` → ставить `allow="..."` на iframe згідно `iframePermissions` і виставляє `frame.src` в `proxyBase` (`/_p/`), якщо це не редирект після свіжого логіну (`fromLogin=true` — iframe уже показує таргет).
 - Імпортує `initGemini()` ([user-gemini.js](public/js/user-gemini.js)), `initFilesStatus()` ([user-files-status.js](public/js/user-files-status.js)), `initSettings()` ([user-settings.js](public/js/user-settings.js)). Реєструє гарячі клавіші / колесо, навішує `frame.addEventListener('load', syncMetaFromFrame)` для синхронізації title/favicon.
-- При завантаженні застосовує збережений вигляд (шрифт/колір/фон для відповіді та кнопки `S`) із `localStorage` через CSS-змінні (`applyAppearance` із [user-appearance.js](public/js/user-appearance.js)).
-- Налаштування зберігаються кількома PUT-запитами — лише для змінених полів: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`. Файли заливаються/видаляються одразу через `/me/files`. UI-вигляд кладеться в `localStorage`.
+- При вході підвантажує збережений вигляд із сервера (`fetchAppearance` → `GET /api/me/appearance`) і застосовує через CSS-змінні (`applyAppearance` із [user-appearance.js](public/js/user-appearance.js)).
+- Налаштування зберігаються кількома PUT-запитами — лише для змінених полів: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`, `/me/appearance`. Файли заливаються/видаляються одразу через `/me/files`.
 
 `initLogin()`:
 
@@ -307,7 +315,7 @@ created_at  INTEGER NOT NULL
   - **Промти**: довільна кількість іменованих промтів, один обраний як активний (radio). Зберігається в `prompts` + `active_prompt_id` через `PUT /api/me/prompts`.
   - **Моделі**: чекбокси по списку `KNOWN_MODELS`, radio для активної моделі, підказка про `Alt+C`. Зберігається через `PUT /api/me/models`.
   - **Файли**: довільні файли (PDF, зображення, текст, аудіо, відео…), що передаються в Gemini контекстом. Додавання — `POST /api/me/files` (base64, MIME визначається браузером), видалення — `DELETE /api/me/files/:id`.
-  - **Вигляд**: окремо для відповіді Gemini та кнопки `S` — шрифт, розмір, колір тексту, колір фону + чекбокс «прозорий фон». Live-preview через CSS-змінні; зберігається в `localStorage` під ключем `uix.appearance`. Зміни застосовуються миттєво, кнопка «Скасувати» відновлює попередній збережений набір.
+  - **Вигляд**: окремо для відповіді Gemini та кнопки `S` — шрифт, розмір, колір тексту, колір фону + чекбокс «прозорий фон». Live-preview через CSS-змінні; зберігається на сервері в таблиці `user_appearance` через `PUT /api/me/appearance`. Зміни застосовуються миттєво (CSS-змінні), кнопка «Скасувати» відновлює попередній збережений набір (із in-memory кешу). Чекбокси «показувати статус файлів»/«показувати тост моделі» відсилаються на сервер відразу після кліку.
 - **Адмін** — посилання на `/admin` (тільки для `isAdmin=true`).
 - **Вихід** — `POST /api/logout`, редирект на `/`.
 
@@ -317,7 +325,7 @@ created_at  INTEGER NOT NULL
 
 Результат (`#geminiResult`) — у **лівому нижньому** куті, той самий прозорий стиль із тінню. Автоматично ховається через **12 секунд**. Помилки виводяться тим самим стилем без червоного кольору.
 
-Стиль кнопки і результату керується через CSS-змінні (`--screenshot-font/size/color/bg`, `--result-font/size/color/bg`), що виставляються `applyAppearance()` на основі `localStorage["uix.appearance"]`. Це дозволяє змінювати шрифт/розмір/колір/фон обох елементів через таб «Вигляд» без перезавантаження.
+Стиль кнопки і результату керується через CSS-змінні (`--screenshot-font/size/color/bg`, `--result-font/size/color/bg`), що виставляються `applyAppearance()` на основі даних із таблиці `user_appearance` (підвантажуються `fetchAppearance()` після успішної автентифікації). Це дозволяє змінювати шрифт/розмір/колір/фон обох елементів через таб «Вигляд» без перезавантаження.
 
 ### Назва вкладки та favicon
 
@@ -402,6 +410,8 @@ created_at  INTEGER NOT NULL
 | PUT    | `/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                             |
 | PUT    | `/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (фільтрується за `KNOWN_MODELS`) |
 | PUT    | `/api/me/active-model` | `{ activeModel: string }` — має бути в `enabledModels`                               |
+| GET    | `/api/me/appearance`   | JSON-обʼєкт із налаштуваннями вигляду (`{}` якщо ще не збережено)                    |
+| PUT    | `/api/me/appearance`   | Повний JSON-обʼєкт налаштувань → пише в `user_appearance.data`                       |
 | GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                |
 | POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → метадані файлу (ліміт 30 МБ)                          |
 | DELETE | `/api/me/files/:id`    | `204`, скидає кеш URI у `gemini.ts`                                                  |
@@ -449,5 +459,3 @@ npm start
 - **Рантайм**: [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3), [`@google/genai`](https://www.npmjs.com/package/@google/genai) — офіційний SDK Gemini API (Files API + `generateContent`)
 - **Dev/build**: `tsx`, `typescript`, `@types/node`, `@types/better-sqlite3`, `sass` (компіляція [styles/style.scss](styles/style.scss) → `public/style.css`), `posthtml` + `posthtml-include` + `posthtml-expressions` (збірка `pages/*.html` → `public/*.html`)
 - **CDN на клієнті** (без npm): [html2canvas 1.4.1](https://cdnjs.com/libraries/html2canvas) — для скріншота iframe
-
-bcrypt і Angular повністю прибрані з проєкту.

@@ -1,9 +1,9 @@
 import { api } from './http.js';
 import {
-  APPEARANCE_KEY,
   APPEARANCE_DEFAULTS,
-  loadAppearance,
   applyAppearance,
+  loadAppearance,
+  saveAppearance,
 } from './user-appearance.js';
 
 function fileToBase64(file) {
@@ -240,14 +240,16 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
   });
 
   Object.entries(ap).forEach(([key, el]) => {
-    const handler = () => {
+    const handler = async () => {
       updateOpacityLabels();
       applyAppearance(collectAppearance());
       if (key === 'showFilesStatus' || key === 'showModelToast') {
-        const stored = loadAppearance();
-        stored[key] = el.checked;
-        localStorage.setItem(APPEARANCE_KEY, JSON.stringify(stored));
-        onAppearanceChanged?.();
+        try {
+          await saveAppearance({ [key]: el.checked });
+          onAppearanceChanged?.();
+        } catch (e) {
+          settingsError.textContent = e.message;
+        }
       }
     };
     el.addEventListener('input', handler);
@@ -351,7 +353,7 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
       }
 
       const a = collectAppearance();
-      localStorage.setItem(APPEARANCE_KEY, JSON.stringify(a));
+      await saveAppearance(a);
       applyAppearance(a);
 
       modal.hidden = true;
