@@ -30,7 +30,7 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 - **Custom prompts** with one active prompt — stored per-user in the DB
 - **Model switching**: enable/disable models in settings; cycle the active model with `Alt+X`
 - **File attachments**: any file type (PDF, images, text, audio, video, …) is stored in the DB and automatically forwarded to Gemini as context alongside the screenshot (Files API + `createPartFromUri`)
-- **Appearance customisation** (font / size / color / background) for the Gemini answer and the `S` button — kept in `localStorage`
+- **Appearance customisation** (font / size / color / background) for the Gemini answer and the `S` button — stored in the DB (`user_appearance` table)
 - `Alt+G/H/M/C` keyboard shortcuts and mouse-wheel control with `Ctrl`/`Alt` modifier
 - Invisible 44×44 click zone in the top-right corner that toggles the menu
 - Tab title and favicon automatically synced with the proxied site
@@ -66,11 +66,12 @@ Each large module is split into smaller files by concern. The public entry point
 
 | File | Purpose |
 | --- | --- |
-| [scripts/db.ts](scripts/db.ts) | Re-export from `db-users` and `db-files` |
+| [scripts/db.ts](scripts/db.ts) | Re-export from `db-users`, `db-files`, `db-appearance` |
 | [scripts/db-connection.ts](scripts/db-connection.ts) | DB open, schema, runtime `ALTER TABLE` migrations |
 | [scripts/db-crypto.ts](scripts/db-crypto.ts) | scrypt password hashing + `safeParseArray` |
 | [scripts/db-users.ts](scripts/db-users.ts) | CRUD over `users` + `verify*` |
 | [scripts/db-files.ts](scripts/db-files.ts) | CRUD over `user_files`, IDs reused (same as `users`) |
+| [scripts/db-appearance.ts](scripts/db-appearance.ts) | `getAppearance`/`setAppearance` for `user_appearance` (one JSON blob per user) |
 
 **Gemini (via `@google/genai`):**
 
@@ -107,7 +108,7 @@ JS and HTML for each page are split by concern — the entry file imports submod
 `user.js` module breakdown:
 
 - [public/js/user.js](public/js/user.js) — entry, `enterAuthed`, `installFavicon`, `installShortcuts`, `initLogin`, `initModelToast`, `shortModel`
-- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_KEY/DEFAULTS`, `loadAppearance`, `applyAppearance`, `hexToRgba`
+- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_DEFAULTS`, `loadAppearance` (in-memory cache), `fetchAppearance`/`saveAppearance` (via `GET/PUT /api/me/appearance`), `applyAppearance`, `hexToRgba`
 - [public/js/user-gemini.js](public/js/user-gemini.js) — `initGemini` (iframe screenshot + Gemini call via `html2canvas`)
 - [public/js/user-files-status.js](public/js/user-files-status.js) — `initFilesStatus` (file-status badge + warm-up button)
 - [public/js/user-settings.js](public/js/user-settings.js) — `initSettings` (tabbed modal: general, prompts, models, files, appearance)
@@ -206,6 +207,13 @@ data        BLOB NOT NULL
 created_at  INTEGER NOT NULL
 ```
 
+`user_appearance` schema (one row per user, JSON blob with `resultFont/Size/Color/...`, `btnFont/Size/...`, `showFilesStatus`, `showModelToast`):
+
+```sql
+user_id  INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
+data     TEXT NOT NULL DEFAULT '{}'
+```
+
 All new columns are added via `ALTER TABLE ADD COLUMN` at runtime — old DBs are migrated automatically on first boot.
 
 ### `session.ts`
@@ -246,8 +254,8 @@ Flow:
 - Wires up `barTrigger` (an invisible 44×44 click zone in the top-right corner) → click toggles the menu.
 - `GET /api/config` → sets `allow="..."` on the iframe per `iframePermissions`, then `frame.src = proxyBase` (`/_p/`) unless this is a redirect right after login (`fromLogin=true` — the iframe already shows the target).
 - Imports `initGemini()` ([user-gemini.js](public/js/user-gemini.js)), `initFilesStatus()` ([user-files-status.js](public/js/user-files-status.js)), `initSettings()` ([user-settings.js](public/js/user-settings.js)). Registers shortcuts / wheel and attaches `frame.addEventListener('load', syncMetaFromFrame)` to mirror the target's title/favicon.
-- On load, applies the saved appearance (font / color / background for the answer and the `S` button) from `localStorage` via CSS variables (`applyAppearance` from [user-appearance.js](public/js/user-appearance.js)).
-- The settings dialog saves through several PUTs — only changed fields: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`. Files are uploaded/deleted live via `/me/files`. Appearance is written to `localStorage`.
+- On entry, fetches the saved appearance from the server (`fetchAppearance` → `GET /api/me/appearance`) and applies it via CSS variables (`applyAppearance` from [user-appearance.js](public/js/user-appearance.js)).
+- The settings dialog saves through several PUTs — only changed fields: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`, `/me/appearance`. Files are uploaded/deleted live via `/me/files`.
 
 `initLogin()`:
 
@@ -312,7 +320,7 @@ Buttons:
   - **Prompts**: any number of named prompts, one chosen as active (radio). Persisted as `prompts` + `active_prompt_id` via `PUT /api/me/prompts`.
   - **Models**: checkboxes over `KNOWN_MODELS`, a radio for the active model, plus a hint about `Alt+C`. Saved via `PUT /api/me/models`.
   - **Files**: arbitrary attachments (PDF, images, text, audio, video, …) forwarded to Gemini as context. Add via `POST /api/me/files` (base64, MIME picked by the browser), delete via `DELETE /api/me/files/:id`.
-  - **Appearance**: separately for the Gemini result and the `S` button — font, size, text color, background color + a "transparent background" checkbox. Live preview via CSS variables; saved in `localStorage` under `uix.appearance`. Changes apply immediately; "Cancel" restores the last saved set.
+  - **Appearance**: separately for the Gemini result and the `S` button — font, size, text color, background color + a "transparent background" checkbox. Live preview via CSS variables; saved server-side in the `user_appearance` table via `PUT /api/me/appearance`. Changes apply immediately (CSS variables); "Cancel" restores the last saved set (from the in-memory cache). The "show files status"/"show model toast" checkboxes are pushed to the server as soon as they're toggled.
 - **Admin** — link to `/admin` (visible only when `isAdmin=true`).
 - **Logout** — `POST /api/logout`, then redirect to `/`.
 
@@ -322,7 +330,7 @@ The "S" button (`#screenshotBtn`) sits in the **top-left** corner (`top: 1rem; l
 
 The result (`#geminiResult`) sits in the **bottom-left** corner with the same transparent + text-shadow style. It auto-hides after **12 seconds**. Errors render with the same plain style — no red error variant.
 
-Both the button and the result are themed via CSS variables (`--screenshot-font/size/color/bg`, `--result-font/size/color/bg`) populated by `applyAppearance()` from `localStorage["uix.appearance"]`. The "Appearance" tab can change font / size / color / background of either element on the fly, no reload needed.
+Both the button and the result are themed via CSS variables (`--screenshot-font/size/color/bg`, `--result-font/size/color/bg`) populated by `applyAppearance()` using the data from the `user_appearance` table (loaded by `fetchAppearance()` after authentication). The "Appearance" tab can change font / size / color / background of either element on the fly, no reload needed.
 
 ### Tab title and favicon
 
@@ -407,6 +415,8 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 | PUT    | `/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                              |
 | PUT    | `/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (filtered against `KNOWN_MODELS`) |
 | PUT    | `/api/me/active-model` | `{ activeModel: string }` — must be in `enabledModels`                                |
+| GET    | `/api/me/appearance`   | JSON object with appearance settings (`{}` if nothing saved yet)                      |
+| PUT    | `/api/me/appearance`   | Full JSON appearance object → written to `user_appearance.data`                       |
 | GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                 |
 | POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → file metadata (30 MB cap)                              |
 | DELETE | `/api/me/files/:id`    | `204`, also clears the URI cache in `gemini.ts`                                       |

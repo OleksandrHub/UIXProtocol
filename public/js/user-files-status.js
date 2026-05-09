@@ -1,5 +1,5 @@
 import { api } from './http.js';
-import { APPEARANCE_KEY, loadAppearance } from './user-appearance.js';
+import { loadAppearance, saveAppearance } from './user-appearance.js';
 
 export function initFilesStatus() {
   const wrap = document.getElementById('filesStatus');
@@ -77,9 +77,8 @@ export function initFilesStatus() {
 
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const a = { ...loadAppearance(), showFilesStatus: false };
-    localStorage.setItem(APPEARANCE_KEY, JSON.stringify(a));
     wrap.hidden = true;
+    saveAppearance({ showFilesStatus: false }).catch(() => {});
   });
 
   return {

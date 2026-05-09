@@ -1,5 +1,9 @@
 import { api } from './http.js';
-import { applyAppearance, loadAppearance } from './user-appearance.js';
+import {
+  APPEARANCE_DEFAULTS,
+  applyAppearance,
+  fetchAppearance,
+} from './user-appearance.js';
 import { initGemini } from './user-gemini.js';
 import { initFilesStatus } from './user-files-status.js';
 import { initSettings } from './user-settings.js';
@@ -7,7 +11,7 @@ import { initSettings } from './user-settings.js';
 const id = Number(location.pathname.split('/').filter(Boolean)[0]);
 if (!Number.isFinite(id)) location.href = '/';
 
-applyAppearance(loadAppearance());
+applyAppearance(APPEARANCE_DEFAULTS);
 
 const frame = document.getElementById('frame');
 const me = await api('/me').catch(() => null);
@@ -43,6 +47,8 @@ function initModelToast() {
 }
 
 async function enterAuthed(me, { fromLogin }) {
+  applyAppearance(await fetchAppearance());
+
   document.body.classList.remove('locked');
   const loginForm = document.getElementById('loginForm');
   if (loginForm) loginForm.hidden = true;

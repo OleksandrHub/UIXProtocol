@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { updateUser } from './db';
+import { getAppearance, setAppearance, updateUser } from './db';
+import type { Appearance } from './db-appearance';
 import { KNOWN_MODELS } from './constants';
 import type { UserPrompt } from './types';
 import { readJson, requireAuth, sendJson } from './api-helpers';
@@ -97,6 +98,25 @@ export async function handleMe(
       return true;
     }
     sendJson(res, 200, updateUser(me.id, { activeModel: body.activeModel }));
+    return true;
+  }
+
+  if (path === '/api/me/appearance' && method === 'GET') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    sendJson(res, 200, getAppearance(me.id));
+    return true;
+  }
+
+  if (path === '/api/me/appearance' && method === 'PUT') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    const body = await readJson<Appearance>(req);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      sendJson(res, 400, { error: 'appearance object required' });
+      return true;
+    }
+    sendJson(res, 200, setAppearance(me.id, body));
     return true;
   }
 

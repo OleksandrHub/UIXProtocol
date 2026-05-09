@@ -1,4 +1,4 @@
-export const APPEARANCE_KEY = 'uix.appearance';
+import { api } from './http.js';
 
 export const APPEARANCE_DEFAULTS = {
   resultFont: '',
@@ -17,6 +17,8 @@ export const APPEARANCE_DEFAULTS = {
   showModelToast: true,
 };
 
+let cache = { ...APPEARANCE_DEFAULTS };
+
 export function hexToRgba(hex, opacityPct) {
   const a = Math.max(0, Math.min(100, Number(opacityPct ?? 100))) / 100;
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
@@ -28,12 +30,24 @@ export function hexToRgba(hex, opacityPct) {
 }
 
 export function loadAppearance() {
+  return cache;
+}
+
+export async function fetchAppearance() {
   try {
-    const raw = localStorage.getItem(APPEARANCE_KEY);
-    return raw ? { ...APPEARANCE_DEFAULTS, ...JSON.parse(raw) } : { ...APPEARANCE_DEFAULTS };
+    const data = await api('/me/appearance');
+    cache = { ...APPEARANCE_DEFAULTS, ...(data && typeof data === 'object' ? data : {}) };
   } catch {
-    return { ...APPEARANCE_DEFAULTS };
+    cache = { ...APPEARANCE_DEFAULTS };
   }
+  return cache;
+}
+
+export async function saveAppearance(partial) {
+  const merged = { ...cache, ...partial };
+  cache = merged;
+  await api('/me/appearance', { method: 'PUT', body: JSON.stringify(merged) });
+  return cache;
 }
 
 export function applyAppearance(a) {
