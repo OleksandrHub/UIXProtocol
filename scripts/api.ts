@@ -15,10 +15,10 @@ import {
   verifyPasswordById,
   verifyPasswordByName,
 } from './db';
-import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from './models/constants';
-import type { UserPrompt } from './models/types';
+import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from './constants';
+import type { UserPrompt } from './types';
 import { clearSession, clearSessionsForUser, getSessionUserId, setSession } from './session';
-import { environment } from './environments/environment';
+import { environment } from '../environments/environment';
 import {
   getCachedFileIds,
   invalidateUploadsForUser,
@@ -247,10 +247,9 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
           text: p.text,
         }));
       const activeId =
-        typeof body.activePromptId === 'string' &&
-        cleaned.some((p) => p.id === body.activePromptId)
+        typeof body.activePromptId === 'string' && cleaned.some((p) => p.id === body.activePromptId)
           ? body.activePromptId
-          : cleaned[0]?.id ?? '';
+          : (cleaned[0]?.id ?? '');
       sendJson(res, 200, updateUser(meUser.id, { prompts: cleaned, activePromptId: activeId }));
       return true;
     }
@@ -271,12 +270,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       const active =
         typeof body.activeModel === 'string' && enabled.includes(body.activeModel)
           ? body.activeModel
-          : enabled[0] ?? '';
-      sendJson(
-        res,
-        200,
-        updateUser(meUser.id, { enabledModels: enabled, activeModel: active })
-      );
+          : (enabled[0] ?? '');
+      sendJson(res, 200, updateUser(meUser.id, { enabledModels: enabled, activeModel: active }));
       return true;
     }
 
@@ -287,7 +282,10 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         return true;
       }
       const body = await readJson<{ activeModel?: string }>(req);
-      if (typeof body.activeModel !== 'string' || !meUser.enabledModels.includes(body.activeModel)) {
+      if (
+        typeof body.activeModel !== 'string' ||
+        !meUser.enabledModels.includes(body.activeModel)
+      ) {
         sendJson(res, 400, { error: 'activeModel must be one of enabledModels' });
         return true;
       }
@@ -313,7 +311,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       }
       const body = await readJson<{ name?: string; mime?: string; dataBase64?: string }>(
         req,
-        30_000_000
+        30_000_000,
       );
       if (!body.name || !body.dataBase64) {
         sendJson(res, 400, { error: 'name and dataBase64 required' });
@@ -520,8 +518,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         if (deleteUser(id)) {
           clearSessionsForUser(id);
           sendNoContent(res);
-        }
-        else sendJson(res, 404, { error: 'not found' });
+        } else sendJson(res, 404, { error: 'not found' });
         return true;
       }
     }

@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "start": "npm run build && node dist/server.js",
-    "dev": "npm run build:assets && tsx server.ts",
+    "dev": "npm run build:assets && tsx ./scripts/server.ts",
     "build": "npm run build:assets && tsc",
     "build:assets": "npm run build:html && npm run build:css",
-    "build:html": "tsx models/build-html.ts",
-    "build:html:watch": "tsx models/build-html.ts --watch",
-    "build:css": "sass public/style.scss public/static/style.css",
-    "build:css:watch": "sass --watch public/style.scss:public/static/style.css",
-    "create-admin": "tsx create-admin.ts"
+    "build:html": "tsx ./scripts/build-html.ts",
+    "build:html:watch": "tsx ./scripts/build-html.ts --watch",
+    "build:css": "sass styles/style.scss public/style.css",
+    "build:css:watch": "sass --watch styles/style.scss:public/style.css",
+    "create-admin": "tsx ./scripts/create-admin.ts"
   },
   "prettier": {
     "printWidth": 100,

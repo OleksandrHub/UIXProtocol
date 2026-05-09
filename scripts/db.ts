@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 
-import { DB_PATH, SCRYPT_KEYLEN } from './models/constants';
+import { DB_PATH, SCRYPT_KEYLEN } from './constants';
 import type {
   CreateUserInput,
   UpdateUserInput,
@@ -9,21 +9,8 @@ import type {
   UserFile,
   UserFileMeta,
   UserPrompt,
-} from './models/types';
-
-interface UserRow {
-  id: number;
-  name: string;
-  password_hash: string;
-  password_first: string;
-  api_keys: string;
-  is_admin: number;
-  target_url: string;
-  prompts: string;
-  active_prompt_id: string;
-  enabled_models: string;
-  active_model: string;
-}
+  UserRow
+} from './types';
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');

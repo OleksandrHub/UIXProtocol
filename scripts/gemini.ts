@@ -1,13 +1,7 @@
 import { GoogleGenAI, createPartFromUri } from '@google/genai';
 
-import { FILE_TTL_MS, REQUEST_TIMEOUT_MS } from './models/constants';
-import type { PreloadResult, SolveOptions, UserFile } from './models/types';
-
-interface UploadedFile {
-  uri: string;
-  mimeType: string;
-  expiresAt: number;
-}
+import { FILE_TTL_MS, REQUEST_TIMEOUT_MS } from './constants';
+import type { PreloadResult, SolveOptions, UserFile, UploadedFile } from './types';
 
 const uploadCache = new Map<string, UploadedFile>();
 

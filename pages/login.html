@@ -1,13 +1,16 @@
 <!doctype html>
 <html lang="uk">
   <head>
-    <include src="partials/login-head.html" locals='{"title": "Вхід"}'></include>
+    <include
+      src="partials/head.html"
+      locals='{"title": "Вхід", "favicon": "/favicon.ico"}'
+    ></include>
   </head>
   <body class="page-login">
     <form class="card" id="form">
       <h1>Вхід</h1>
       <include src="partials/login-fields.html"></include>
     </form>
-    <script type="module" src="/static/login.js"></script>
+    <script type="module" src="/js/login.js"></script>
   </body>
 </html>

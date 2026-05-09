@@ -1,5 +1,4 @@
 import * as readline from 'node:readline';
-
 import { createUser } from './db';
 
 async function readStdin(): Promise<string[]> {

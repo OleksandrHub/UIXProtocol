@@ -7,7 +7,7 @@ import { URL } from 'node:url';
 import { handleApi } from './api';
 import { getSessionUserId, parseCookie } from './session';
 import { getUserById } from './db';
-import { environment } from './environments/environment';
+import { environment } from '../environments/environment';
 import {
   MIME,
   PREVIEW_COOKIE,
@@ -15,7 +15,7 @@ import {
   PROXY_PREFIX,
   PUBLIC_DIR,
   SESSION_COOKIE_NAME,
-} from './models/constants';
+} from './constants';
 
 function serveFile(res: http.ServerResponse, file: string): void {
   fs.stat(file, (err, stat) => {
@@ -34,10 +34,10 @@ function serveFile(res: http.ServerResponse, file: string): void {
   });
 }
 
-function safeStaticPath(reqPath: string): string | null {
-  const rel = decodeURIComponent(reqPath.replace(/^\/static\//, ''));
-  const target = path.normalize(path.join(PUBLIC_DIR, 'static', rel));
-  const root = path.join(PUBLIC_DIR, 'static') + path.sep;
+function safeJsPath(reqPath: string): string | null {
+  const rel = decodeURIComponent(reqPath.replace(/^\/js\//, ''));
+  const target = path.normalize(path.join(PUBLIC_DIR, 'js', rel));
+  const root = path.join(PUBLIC_DIR, 'js') + path.sep;
   return target.startsWith(root) ? target : null;
 }
 
@@ -268,8 +268,13 @@ http
       return;
     }
 
-    if (reqPath.startsWith('/static/')) {
-      const target = safeStaticPath(reqPath);
+    if (reqPath === '/style.css' || reqPath === '/style.css.map') {
+      serveFile(res, path.join(PUBLIC_DIR, reqPath.slice(1)));
+      return;
+    }
+
+    if (reqPath.startsWith('/js/')) {
+      const target = safeJsPath(reqPath);
       if (!target) {
         res.writeHead(404);
         res.end();

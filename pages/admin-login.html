@@ -1,7 +1,10 @@
 <!doctype html>
 <html lang="uk">
   <head>
-    <include src="partials/login-head.html" locals='{"title": "Admin"}'></include>
+    <include
+      src="partials/head.html"
+      locals='{"title": "Admin", "favicon": "/favicon.ico"}'
+    ></include>
   </head>
   <body class="page-login">
     <form class="card" id="form">
@@ -9,6 +12,6 @@
       <include src="partials/login-fields.html"></include>
       <a class="link" href="/">До звичайного входу</a>
     </form>
-    <script type="module" src="/static/admin-login.js"></script>
+    <script type="module" src="/js/admin-login.js"></script>
   </body>
 </html>
