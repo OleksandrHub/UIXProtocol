@@ -8,8 +8,8 @@
 
 # Built assets (sources live in /pages and /styles, output goes to /public)
 /public/*.html
-/public/static/style.css
-/public/static/style.css.map
+/public/style.css
+/public/style.css.map
 
 # Node
 /node_modules

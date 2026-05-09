@@ -1,0 +1,18 @@
+<section class="section">
+  <h2 id="formTitle">Створити користувача</h2>
+  <form id="form" class="form">
+    <input type="hidden" id="userId" />
+    <label>Ім'я <input id="name" type="text" required /></label>
+    <label>Пароль <input id="password" type="password" placeholder="" /></label>
+    <label>URL <input id="targetUrl" type="text" placeholder="https://example.com" /></label>
+    <label
+      >API ключі (по одному на рядок)
+      <textarea id="apiKeys" rows="3"></textarea>
+    </label>
+    <label class="check"><input id="isAdmin" type="checkbox" /> Адмін</label>
+    <div class="form__actions">
+      <button type="button" id="resetBtn">Очистити</button>
+      <button type="submit" id="submitBtn">Створити</button>
+    </div>
+  </form>
+</section>

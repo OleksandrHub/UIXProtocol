@@ -14,15 +14,15 @@
     "types": ["node"]
   },
   "include": [
-    "server.ts",
-    "api.ts",
-    "db.ts",
-    "session.ts",
-    "gemini.ts",
-    "create-admin.ts",
-    "models/build-html.ts",
-    "models/constants.ts",
-    "models/types.ts",
+    "scripts/server.ts",
+    "scripts/api.ts",
+    "scripts/db.ts",
+    "scripts/session.ts",
+    "scripts/sgemini.ts",
+    "scripts/create-admin.ts",
+    "scripts/build-html.ts",
+    "scripts/constants.ts",
+    "scripts/types.ts",
     "environments/**/*.ts"
   ]
 }
