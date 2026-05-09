@@ -12,7 +12,7 @@ Four commands and you're up:
 git clone <url>
 npm install
 npm run create-admin -- admin "your_password"
-npm run dev
+npm run start
 ```
 
 Open `http://localhost:3000/admin`, sign in as `admin`, create users. Each user then visits `http://localhost:3000/` (login form) or `http://localhost:3000/<their_id>/` directly.
@@ -39,28 +39,93 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 
 ## Architecture
 
+Each large module is split into smaller files by concern. The public entry points (`server.ts`, `api.ts`, `db.ts`, `gemini.ts`) stay — they re-export or dispatch to the rest.
+
 ### Server
+
+**HTTP / routing:**
 
 | File | Purpose |
 | --- | --- |
-| [server.ts](server.ts) | HTTP server on a single port: static, user/admin routes, proxy |
-| [api.ts](api.ts) | REST API (`/api/*`) — login, users, settings, prompts, models, files, Gemini |
-| [db.ts](db.ts) | SQLite (`better-sqlite3`) + scrypt password hashing, `user_files` table for attachments |
-| [session.ts](session.ts) | In-memory sessions, `uix_session` HttpOnly cookie |
-| [gemini.ts](gemini.ts) | Gemini calls via the `@google/genai` SDK + Files API + parsing of the short test answer |
+| [scripts/server.ts](scripts/server.ts) | Entry: `http.createServer` + route dispatcher |
+| [scripts/server-static.ts](scripts/server-static.ts) | `serveFile`, `safeJsPath` — local-file streaming |
+| [scripts/server-proxy.ts](scripts/server-proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — reverse proxy and preview mode |
+
+**REST API (`/api/*`):**
+
+| File | Purpose |
+| --- | --- |
+| [scripts/api.ts](scripts/api.ts) | Dispatcher: tries each handler group in order |
+| [scripts/api-helpers.ts](scripts/api-helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
+| [scripts/api-auth.ts](scripts/api-auth.ts) | login / logout / `/api/me` / `/api/config` / `/api/users/by-name` |
+| [scripts/api-me.ts](scripts/api-me.ts) | User settings: URL, keys, password, prompts, models |
+| [scripts/api-files.ts](scripts/api-files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
+| [scripts/api-admin-users.ts](scripts/api-admin-users.ts) | Admin CRUD over users |
+
+**Database (`better-sqlite3`):**
+
+| File | Purpose |
+| --- | --- |
+| [scripts/db.ts](scripts/db.ts) | Re-export from `db-users` and `db-files` |
+| [scripts/db-connection.ts](scripts/db-connection.ts) | DB open, schema, runtime `ALTER TABLE` migrations |
+| [scripts/db-crypto.ts](scripts/db-crypto.ts) | scrypt password hashing + `safeParseArray` |
+| [scripts/db-users.ts](scripts/db-users.ts) | CRUD over `users` + `verify*` |
+| [scripts/db-files.ts](scripts/db-files.ts) | CRUD over `user_files`, IDs reused (same as `users`) |
+
+**Gemini (via `@google/genai`):**
+
+| File | Purpose |
+| --- | --- |
+| [scripts/gemini.ts](scripts/gemini.ts) | `solveWithGemini`, `preloadFiles`, `callOnce` — orchestration |
+| [scripts/gemini-cache.ts](scripts/gemini-cache.ts) | In-memory cache `<apiKey>::<fileId>` → uploaded URI |
+| [scripts/gemini-parser.ts](scripts/gemini-parser.ts) | `parseResultText` — short-answer extraction |
+
+**Other:**
+
+| File | Purpose |
+| --- | --- |
+| [scripts/session.ts](scripts/session.ts) | In-memory sessions, `uix_session` HttpOnly cookie |
+| [scripts/constants.ts](scripts/constants.ts) | Paths, MIME, timeouts, `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT` |
+| [scripts/types.ts](scripts/types.ts) | `User`, `UserFile`, `SolveOptions`, `ProxyOpts`, … |
+| [scripts/build-html.ts](scripts/build-html.ts) | Builds [pages/](pages) → [public/](public) (posthtml-include + expressions) |
+| [scripts/create-admin.ts](scripts/create-admin.ts) | CLI to create the first admin |
 | [environments/environment.ts](environments/environment.ts) | Config: port, default target, session TTL, iframe permissions |
-| [create-admin.ts](create-admin.ts) | CLI to create the first admin |
 
 ### Client (no frameworks)
 
+JS and HTML for each page are split by concern — the entry file imports submodules via ES modules.
+
 | Page | HTML | Logic |
 | --- | --- | --- |
-| Generic login | [public/login.html](public/login.html) | [public/static/login.js](public/static/login.js) |
-| User dashboard | [public/user.html](public/user.html) | [public/static/user.js](public/static/user.js) |
-| Admin login | [public/admin-login.html](public/admin-login.html) | [public/static/admin-login.js](public/static/admin-login.js) |
-| Admin panel | [public/admin.html](public/admin.html) | [public/static/admin.js](public/static/admin.js) |
-| Styles | [public/static/style.css](public/static/style.css) | — |
-| HTTP wrapper | — | [public/static/http.js](public/static/http.js) — `api(path, opts)` |
+| Generic login | [pages/login.html](pages/login.html) → `public/login.html` | [public/js/login.js](public/js/login.js) |
+| User dashboard | [pages/user.html](pages/user.html) → `public/user.html` | [public/js/user.js](public/js/user.js) (+ `user-appearance`, `user-gemini`, `user-files-status`, `user-settings`) |
+| Admin login | [pages/admin-login.html](pages/admin-login.html) → `public/admin-login.html` | [public/js/admin-login.js](public/js/admin-login.js) |
+| Admin panel | [pages/admin.html](pages/admin.html) → `public/admin.html` | [public/js/admin.js](public/js/admin.js) (+ `admin-users.js`) |
+| Styles | [styles/style.scss](styles/style.scss) → `public/style.css` | — |
+| HTTP wrapper | — | [public/js/http.js](public/js/http.js) — `api(path, opts)` |
+
+`user.js` module breakdown:
+
+- [public/js/user.js](public/js/user.js) — entry, `enterAuthed`, `installFavicon`, `installShortcuts`, `initLogin`, `initModelToast`, `shortModel`
+- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_KEY/DEFAULTS`, `loadAppearance`, `applyAppearance`, `hexToRgba`
+- [public/js/user-gemini.js](public/js/user-gemini.js) — `initGemini` (iframe screenshot + Gemini call via `html2canvas`)
+- [public/js/user-files-status.js](public/js/user-files-status.js) — `initFilesStatus` (file-status badge + warm-up button)
+- [public/js/user-settings.js](public/js/user-settings.js) — `initSettings` (tabbed modal: general, prompts, models, files, appearance)
+
+`admin.js` is split into:
+
+- [public/js/admin.js](public/js/admin.js) — entry, admin guard, form, `setEdit`
+- [public/js/admin-users.js](public/js/admin-users.js) — `setupUsers({ tbody, errEl, fieldId, setEdit })` → `{ refresh }`, table render, `removeUser`
+
+### Asset pipeline
+
+HTML and CSS sources live outside `public/` and compile into it:
+
+- **HTML**: `pages/*.html` with includes (`<include src="partials/...">`) → `public/*.html` via [scripts/build-html.ts](scripts/build-html.ts) (`posthtml` + `posthtml-include` + `posthtml-expressions`).
+- **CSS**: `styles/style.scss` (with `@use 'base'`, `'login'`, `'user'`, `'gemini'`, `'modal'`, `'admin'`, `'responsive'`) → `public/style.css` via `sass`.
+- **JS**: served as-is from `public/js/` — no bundler, plain ES modules.
+
+`npm run build:assets` runs both stages; `npm run dev` does that plus `tsx server.ts`. Watch mode: `npm run build:html:watch` / `npm run build:css:watch` (only needed when actively editing HTML/SCSS).
 
 ### Server routes
 
@@ -68,41 +133,50 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 - `/<id>/` — user workspace (iframe + menu) or password form for that specific user
 - `/admin` — admin panel (login form, then user-management UI)
 - `/_p/<id>/...` — preview proxy for unauthenticated visitors (target cookies are dropped, a `uix_preview` cookie is set)
-- `/static/*` — static assets (CSS/JS/icons)
+- `/style.css` (+ `/style.css.map`) and `/favicon.ico` — static assets from `public/`
+- `/js/*` — client modules from `public/js/`
 - `/api/*` — REST (see below)
 - everything else — fallback proxy (for absolute paths inside proxied HTML)
 
 ## Server modules — key functions
 
-### `server.ts`
+### `server.ts` + `server-static.ts` + `server-proxy.ts`
 
-- `serveFile(res, file)` — streams a local file with `Cache-Control: no-store`; MIME picked by extension.
-- `safeStaticPath(reqPath)` — normalises a `/static/*` path and blocks path traversal outside `public/static/`.
-- `rewriteUrls(text, targetHost)` — strips `https://<targetHost>` and `http://<targetHost>` from response bodies so all absolute links stay within our origin.
-- `performProxy(req, res, targetRaw, pathOnly, opts)` — performs the upstream http(s) request, rewrites `Set-Cookie` (drops `Domain`, `Secure`, forces `SameSite=Lax`), strips `X-Frame-Options` / `Content-Security-Policy` / `Strict-Transport-Security` / `Feature-Policy`, injects its own `Permissions-Policy` from `iframePermissions`. For `text/html` and `application/javascript` it buffers the body and runs `rewriteUrls`. Options:
+- `serveFile(res, file)` ([server-static.ts](scripts/server-static.ts)) — streams a local file with `Cache-Control: no-store`; MIME picked by extension.
+- `safeJsPath(reqPath)` ([server-static.ts](scripts/server-static.ts)) — normalises a `/js/*` path and blocks path traversal outside `public/js/`.
+- `rewriteUrls(text, targetHost)` ([server-proxy.ts](scripts/server-proxy.ts)) — strips `https://<targetHost>` and `http://<targetHost>` from response bodies so all absolute links stay within our origin.
+- `performProxy(req, res, targetRaw, pathOnly, opts)` ([server-proxy.ts](scripts/server-proxy.ts)) — performs the upstream http(s) request, rewrites `Set-Cookie` (drops `Domain`, `Secure`, forces `SameSite=Lax`), strips `X-Frame-Options` / `Content-Security-Policy` / `Strict-Transport-Security` / `Feature-Policy`, injects its own `Permissions-Policy` from `iframePermissions`. For `text/html` and `application/javascript` it buffers the body and runs `rewriteUrls`. Options (`ProxyOpts` from [types.ts](scripts/types.ts)):
   - `sendCookies: false` — do not forward client cookies to the target
   - `stripSetCookie: true` — drop `Set-Cookie` from the upstream response (preview mode)
   - `setPreviewCookie: <userId>` — set `uix_preview=<userId>` cookie (HttpOnly, Lax)
-- `proxyForUser(req, res, userId, reqPath, preview)` — picks the user's `target_url` (or `defaultTarget`) and calls `performProxy`.
-- `proxyHandle(req, res)` — request-owner resolution order:
+- `proxyForUser(req, res, userId, reqPath, preview)` ([server-proxy.ts](scripts/server-proxy.ts)) — picks the user's `target_url` (or `defaultTarget`) and calls `performProxy`.
+- `proxyHandle(req, res)` ([server-proxy.ts](scripts/server-proxy.ts)) — request-owner resolution order:
   1. Session (`uix_session`) → proxy for the session user
   2. `Referer` starts with `/_p/<id>/` → preview for that `id`
   3. Cookie `uix_preview` → preview for that `id`
   4. Otherwise → `403`
+- `server.ts` itself is just `http.createServer` plus a flat chain of `if`s sieving `/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/`, and `/`. Anything else falls into `proxyHandle`.
 
-### `api.ts`
+### `api.ts` (dispatcher) + `api-*.ts` (route groups)
 
-`handleApi(req, res)` returns `true` if the request was handled as `/api/*`, otherwise `false` and control falls back to the `server.ts` router. Bodies are read via `readJson<T>()` with a 1 MB limit (15 MB for `/api/gemini/solve` because of the base64 image). Errors serialise to `{ error: "..." }`.
+`handleApi(req, res)` returns `true` if the request was handled as `/api/*`, otherwise `false` and control falls back to the `server.ts` router. The dispatcher itself is tiny: it tries `handleAuth` → `handleMe` → `handleFiles` → `handleAdminUsers` and the first one to return `true` wins. Otherwise — `404`.
 
-### `db.ts`
+Bodies are read via `readJson<T>()` ([api-helpers.ts](scripts/api-helpers.ts)) with a 1 MB limit (30 MB for `POST /api/me/files`, 15 MB for `/api/gemini/solve` because of the base64 image). Errors serialise to `{ error: "..." }` via `sendJson(res, status, body)`.
 
-- `hashPassword(password)` / `verifyHash(password, stored)` — scrypt (`node:crypto`), 16-byte salt, 64-byte key, format `scrypt$<salt-hex>$<hash-hex>`. Verification uses `crypto.timingSafeEqual`.
-- `firstChar(s)` — `[...s][0]`, so it correctly handles Unicode codepoints (emoji, etc.).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`. On create, the smallest free `id` is chosen to reuse gaps after deletions.
-- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` — CRUD for attached files (type is not restricted: PDF, images, text, audio, video).
-- `verifyPasswordById` / `verifyPasswordByName` — full password verification; on success calls `backfillFirstChar` if the column is empty.
-- `verifyFirstCharById` — compares one character against `password_first` (no hashing). Only works once the column is populated.
-- Exports `KNOWN_MODELS` (the list of supported Gemini models) and `DEFAULT_PROMPT_TEXT` (the default test-solving prompt).
+`requireAuth(req, res)` (shared by `api-me`/`api-files`) returns the `User` or `null`, having already replied `401`. [api-admin-users.ts](scripts/api-admin-users.ts) layers on `requireAdmin(req, res)`, which also checks `isAdmin`.
+
+### `db.ts` + `db-connection.ts` + `db-crypto.ts` + `db-users.ts` + `db-files.ts`
+
+`db.ts` is a re-export of `db-users` + `db-files`, so `from './db'` imports keep working.
+
+- `hashPassword(password)` / `verifyHash(password, stored)` ([db-crypto.ts](scripts/db-crypto.ts)) — scrypt (`node:crypto`), 16-byte salt, 64-byte key, format `scrypt$<salt-hex>$<hash-hex>`. Verification uses `crypto.timingSafeEqual`.
+- `firstChar(s)` ([db-crypto.ts](scripts/db-crypto.ts)) — `[...s][0]`, so it correctly handles Unicode codepoints (emoji, etc.).
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` ([db-users.ts](scripts/db-users.ts)) — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`. On create, the smallest free `id` is chosen (`nextUserId()`) to reuse gaps after deletions.
+- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` ([db-files.ts](scripts/db-files.ts)) — CRUD for attached files (type is not restricted: PDF, images, text, audio, video). `addUserFile` runs in a transaction and picks the smallest free `id` via `nextFileId()` — same approach as users — so deleted file IDs are reused.
+- `verifyPasswordById` / `verifyPasswordByName` ([db-users.ts](scripts/db-users.ts)) — full password verification; on success calls `backfillFirstChar` if the column is empty.
+- `verifyFirstCharById` ([db-users.ts](scripts/db-users.ts)) — compares one character against `password_first` (no hashing). Only works once the column is populated.
+- The schema, `PRAGMA journal_mode = WAL`, and every `ALTER TABLE ADD COLUMN` migration live in [db-connection.ts](scripts/db-connection.ts) — importing it readies the DB.
+- `KNOWN_MODELS` and `DEFAULT_PROMPT_TEXT` live in [constants.ts](scripts/constants.ts) (they used to be in `db.ts`).
 
 `users` schema:
 
@@ -143,21 +217,22 @@ All new columns are added via `ALTER TABLE ADD COLUMN` at runtime — old DBs ar
 - `clearSessionsForUser(userId)` — clears all active sessions for a user (called on delete).
 - A `setInterval(...).unref()` sweeps expired sessions every 60 s.
 
-### `gemini.ts`
+### `gemini.ts` + `gemini-cache.ts` + `gemini-parser.ts`
 
 Uses the official `@google/genai` SDK instead of raw `fetch`. Call flow:
 
-- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` — iterates models in user-defined order (the active model first), and for each model tries every API key. The first success returns; otherwise the last error is thrown. 20-second timeout per request, no auto-retries.
-- `uploadFileForKey(client, apiKey, file)` — lazily uploads a `UserFile` (BLOB from the DB) to the Gemini Files API via `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Returns `{ uri, mimeType, expiresAt }`. The result is cached in memory in `Map<"<apiKey>::<fileId>", UploadedFile>` for ~40 hours (the Files API itself keeps files for ~48h).
+- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` ([gemini.ts](scripts/gemini.ts)) — iterates models in user-defined order (the active model first), and for each model tries every API key. The first success returns; otherwise the last error is thrown. 20-second timeout per request, no auto-retries.
+- `uploadFileForKey(client, apiKey, file)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — lazily uploads a `UserFile` (BLOB from the DB) to the Gemini Files API via `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Returns `{ uri, mimeType, expiresAt }`. The result is cached in memory in `Map<"<apiKey>::<fileId>", UploadedFile>` for ~40 hours (the Files API itself keeps files for ~48h).
 - The actual call: `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 } }, contents })`. `parts` start with the prompt text, then PDF parts via `createPartFromUri(uri, mime)`, ending with the screenshot `inlineData` (JPEG base64).
-- `invalidateUploadsForUser(fileIds)` — called from `api.ts` when a user deletes a file, clearing the cache for that `fileId` across every key.
-- `parseResultText(text)` — first looks for `Відповідь:` / `Answer:`, then for the first line matching `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
+- `invalidateUploadsForUser(fileIds)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — called from [api-files.ts](scripts/api-files.ts) when a user deletes a file, clearing the cache for that `fileId` across every key.
+- `dropCacheForKey(apiKey)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — drops every URI for one key; called by `solveWithGemini` after a failed attempt.
+- `parseResultText(text)` ([gemini-parser.ts](scripts/gemini-parser.ts)) — first looks for `Відповідь:` / `Answer:`, then for the first line matching `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
 
 If a request to one (model, key) pair fails, the URI cache for that key is reset automatically — the next attempt re-uploads the files.
 
 ## Client pages
 
-### `/<id>/` — user dashboard ([public/static/user.js](public/static/user.js))
+### `/<id>/` — user dashboard ([public/js/user.js](public/js/user.js))
 
 Flow:
 
@@ -166,41 +241,44 @@ Flow:
 3. Otherwise → `initLogin()` — quick login.
 
 `enterAuthed(me, { fromLogin })`:
+
 - Shows the top-bar with the user name plus "Settings", "Admin" (admins only), "Logout".
 - Wires up `barTrigger` (an invisible 44×44 click zone in the top-right corner) → click toggles the menu.
 - `GET /api/config` → sets `allow="..."` on the iframe per `iframePermissions`, then `frame.src = proxyBase` (`/_p/`) unless this is a redirect right after login (`fromLogin=true` — the iframe already shows the target).
-- Spawns the Gemini panel, registers shortcuts / wheel, and attaches `frame.addEventListener('load', syncMetaFromFrame)` to mirror the target's title/favicon.
-- On load, applies the saved appearance (font / color / background for the answer and the `S` button) from `localStorage` via CSS variables.
-- The settings dialog saves through several PUTs — only changed fields: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`. PDF files are uploaded/deleted live via `/me/files`. Appearance is written to `localStorage`.
+- Imports `initGemini()` ([user-gemini.js](public/js/user-gemini.js)), `initFilesStatus()` ([user-files-status.js](public/js/user-files-status.js)), `initSettings()` ([user-settings.js](public/js/user-settings.js)). Registers shortcuts / wheel and attaches `frame.addEventListener('load', syncMetaFromFrame)` to mirror the target's title/favicon.
+- On load, applies the saved appearance (font / color / background for the answer and the `S` button) from `localStorage` via CSS variables (`applyAppearance` from [user-appearance.js](public/js/user-appearance.js)).
+- The settings dialog saves through several PUTs — only changed fields: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`. Files are uploaded/deleted live via `/me/files`. Appearance is written to `localStorage`.
 
 `initLogin()`:
+
 - Sets `frame.src = "/_p/<id>/"` so the user already sees the target before logging in (preview mode).
 - Reveals a hidden `<input type="password" maxLength="1">`. The `input` event fires `POST /api/login/<id>/quick` with the single character as soon as the field has exactly one char.
 - On error: adds `wrong shake` (CSS shake animation) and refocuses.
 
-### `/` — full login ([public/static/login.js](public/static/login.js))
+### `/` — full login ([public/js/login.js](public/js/login.js))
 
 Plain `name + password` form → `POST /api/login` → redirect to `/<user.id>/`.
 
-### `/admin` ([public/static/admin.js](public/static/admin.js), [public/static/admin-login.js](public/static/admin-login.js))
+### `/admin` ([public/js/admin.js](public/js/admin.js), [public/js/admin-login.js](public/js/admin-login.js))
 
 - If you're not an admin, the server returns `admin-login.html` with a `POST /api/admin/login` form. After success — `location.reload()` and the server returns `admin.html`.
 - The admin panel: a user table (id, name, admin, target, key count), a "Create / Edit" form, and `DELETE /api/users/:id` guarded with `confirm()`.
+- The table render and `removeUser` live in [admin-users.js](public/js/admin-users.js) (`setupUsers({ tbody, errEl, fieldId, setEdit }) → { refresh }`); the form and its `setEdit` stay in `admin.js`.
 - During edit: an empty "Password" field keeps the existing password; API keys — one per line.
 
-### Shared — [public/static/http.js](public/static/http.js)
+### Shared — [public/js/http.js](public/js/http.js)
 
 `api(path, opts)` — a wrapper around `fetch('/api' + path)` with `Content-Type: application/json` and `credentials: same-origin`. Returns `null` for `204`, parses JSON, throws an `Error` with `body.error` on non-2xx.
 
 ## Keyboard shortcuts
 
-`installShortcuts()` in [public/static/user.js](public/static/user.js#L245) registers a `keydown` listener on `window` and **also** mirrors it into `iframe.contentDocument` (via `attachToFrame` after `load`) — so the shortcuts still fire when focus is inside the target. The handler only triggers on `Alt + key` (no `Ctrl`/`Meta`) and is **ignored** in text inputs (`INPUT`, `TEXTAREA`, `contentEditable`).
+`installShortcuts()` in [public/js/user.js](public/js/user.js) registers a `keydown` listener on `window` and **also** mirrors it into `iframe.contentDocument` (via `attachToFrame` after `load`) — so the shortcuts still fire when focus is inside the target. The handler only triggers on `Alt + key` (no `Ctrl`/`Meta`) and is **ignored** in text inputs (`INPUT`, `TEXTAREA`, `contentEditable`).
 
-| Key | Action | Implementation |
-| --- | --- | --- |
-| `Alt+G` | Take an iframe screenshot and send to Gemini | `triggerGemini()` |
-| `Alt+H` | Show/hide the last Gemini answer | `toggleResult()` |
-| `Alt+M` | Show/hide the top-bar menu | `toggleBar()` |
+| Key     | Action                                                | Implementation                                                                                                     |
+| ------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Alt+G` | Take an iframe screenshot and send to Gemini          | `triggerGemini()`                                                                                                  |
+| `Alt+H` | Show/hide the last Gemini answer                      | `toggleResult()`                                                                                                   |
+| `Alt+M` | Show/hide the top-bar menu                            | `toggleBar()`                                                                                                      |
 | `Alt+C` | Cycle the active Gemini model to the next enabled one | `cycleModel()` — `PUT /api/me/active-model`, the short name briefly appears in `#modelToast` (bottom-right corner) |
 
 For a cross-origin iframe target, `frame.contentDocument` will be `null` and only the outer-window listener fires. Gemini itself also requires same-origin access (the screenshot is built from the iframe's DOM via `html2canvas`).
@@ -209,9 +287,9 @@ For a cross-origin iframe target, `frame.contentDocument` will be `null` and onl
 
 The same `installShortcuts()` listens for `wheel` (`passive: false`, capture) and mirrors into the iframe. It **only fires when `Ctrl` or `Alt` is held** — a plain wheel still scrolls the page normally. Cooldown is **700 ms** between actions so a long scroll doesn't spam requests.
 
-| Gesture | Action |
-| --- | --- |
-| `Ctrl`/`Alt` + wheel up (`deltaY < 0`) | `triggerGemini()` — fire Gemini |
+| Gesture                                  | Action                               |
+| ---------------------------------------- | ------------------------------------ |
+| `Ctrl`/`Alt` + wheel up (`deltaY < 0`)   | `triggerGemini()` — fire Gemini      |
 | `Ctrl`/`Alt` + wheel down (`deltaY > 0`) | `toggleResult()` — toggle the answer |
 
 `preventDefault` is only called when the modifier is pressed; otherwise scroll passes through to the page/iframe untouched. `Ctrl+wheel` is the default browser zoom — in this dashboard it's repurposed to trigger Gemini.
@@ -227,6 +305,7 @@ The same `installShortcuts()` listens for `wheel` (`passive: false`, capture) an
 `<header id="bar">` is hidden by default and shows up after a successful login. Visibility is the `.show` class — `transform: translateY(-100%)` ↔ `translateY(0)` with a `.2s` transition.
 
 Buttons:
+
 - **User name** — plain text.
 - **Settings** — opens a tabbed modal:
   - **General**: site URL → `PUT /api/me/url`, API keys → `PUT /api/me/api-keys`, new password (empty — keep current) → `PUT /api/me/password`.
@@ -249,24 +328,25 @@ Both the button and the result are themed via CSS variables (`--screenshot-font/
 
 The dashboard automatically picks up the proxied site's name and icon:
 
-- **Favicon (no JS)**: [public/user.html](public/user.html) declares `<link rel="icon" id="favicon" href="/_p/favicon.ico">`. The browser fetches `/_p/favicon.ico` → `proxyHandle` → upstream `/favicon.ico` on the target. Works before the iframe even loads.
-- **Title + custom icon paths** ([syncMetaFromFrame](public/static/user.js#L39)) — on `iframe.load`:
+- **Favicon (no JS)**: [pages/user.html](pages/user.html) declares `<link rel="icon" id="favicon" href="/_p/favicon.ico">`. The browser fetches `/_p/favicon.ico` → `proxyHandle` → upstream `/favicon.ico` on the target. Works before the iframe even loads.
+- **Title + custom icon paths** (`syncMetaFromFrame` in [public/js/user.js](public/js/user.js)) — on `iframe.load`:
   - `document.title = frame.contentDocument.title` (same-origin via the proxy); falls back to `me.name` if the target has no title.
   - Looks for `<link rel~="icon">` or `<link rel="shortcut icon">` inside the iframe document. If origin matches our own — substitutes `/_p<path>` (so it goes through the proxy); if it's a different-host CDN — uses the absolute URL as-is (favicons aren't subject to CORS).
 - Fires on every iframe `load` — internal anchor navigation in the target also re-syncs title/favicon.
 
 ## Gemini screenshot
 
-Client side ([initGemini, user.js](public/static/user.js)):
+Client side (`initGemini` in [public/js/user-gemini.js](public/js/user-gemini.js)):
 
 1. `getFrameWindow()` grabs `iframe.contentWindow` / `contentDocument`. Cross-origin → immediate `Error('iframe недоступний')`.
-2. `ensureHtml2Canvas(win)` — injects [html2canvas 1.4.1](https://html2canvas.hertzen.com/) from CDN into `iframe.contentDocument` (the outer page already has it, included via `<script>` in [user.html](public/user.html)).
+2. `ensureHtml2Canvas(win)` — injects [html2canvas 1.4.1](https://html2canvas.hertzen.com/) from CDN into `iframe.contentDocument` (the outer page already has it, included via `<script>` in [pages/user.html](pages/user.html)).
 3. `captureFrame()` — `html2canvas` with `useCORS`, `allowTaint`, viewport area (`scrollX/scrollY` + `innerWidth/innerHeight`).
 4. `canvasToBase64Jpeg()` — downscales to **1600 px** width, JPEG quality **0.7**, base64.
-5. `POST /api/gemini/solve` with just `imageBase64`. The active prompt, active model, and PDF attachments are pulled from the user record on the server.
+5. `POST /api/gemini/solve` with just `imageBase64`. The active prompt, active model, and file attachments are pulled from the user record on the server.
 6. The answer is rendered into `.gemini-result`.
 
-Server side ([api.ts](api.ts) → [gemini.ts](gemini.ts)):
+Server side ([api-files.ts](scripts/api-files.ts) → [gemini.ts](scripts/gemini.ts)):
+
 - Picks the user's active prompt (fallback — first in the list, then `DEFAULT_PROMPT_TEXT`).
 - Builds the model order: `activeModel` first, then the rest of `enabledModels`. If nothing is enabled — falls back to `gemini-2.5-flash`.
 - Loads every `user_files` record for the user (any type — PDF / image / text / audio / video) and passes them into `solveWithGemini`, which calls `client.files.upload` (with URI cache per key).
@@ -275,7 +355,7 @@ Guards: a concurrent call is blocked by the `busy` flag; the button is disabled 
 
 ## Responsive (mobile)
 
-A single media block in [public/static/style.css](public/static/style.css) — `@media (max-width: 640px)`:
+A single media block in [styles/_responsive.scss](styles/_responsive.scss) (compiled into `public/style.css`) — `@media (max-width: 640px)`:
 
 - **Top-bar**: `flex-wrap: wrap`, `.8rem` font, `.4rem` gap. The user name gets `flex-basis: 100%` (drops onto its own row) with `text-overflow: ellipsis` for long names. Padding `.5rem 60px .5rem .75rem` — the right side is reserved for the trigger.
 - **Admin panel**:
@@ -292,13 +372,13 @@ A single media block in [public/static/style.css](public/static/style.css) — `
 
 [environments/environment.ts](environments/environment.ts):
 
-| Field | Description |
-| --- | --- |
-| `port` | Server port (default `3000`) |
-| `defaultTarget` | URL used when a user's `target_url` is empty |
-| `sessionTtlMs` | Session lifetime in milliseconds (1 hour) |
+| Field               | Description                                         |
+| ------------------- | --------------------------------------------------- |
+| `port`              | Server port (default `3000`)                        |
+| `defaultTarget`     | URL used when a user's `target_url` is empty        |
+| `sessionTtlMs`      | Session lifetime in milliseconds (1 hour)           |
 | `iframePermissions` | `Permissions-Policy` features granted to the iframe |
-| `production` | Reserved (not yet used) |
+| `production`        | Reserved (not yet used)                             |
 
 ## REST API
 
@@ -306,41 +386,41 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 
 ### Public
 
-| Method | Path | Description |
-| --- | --- | --- |
-| POST | `/api/login` | `{name, password}` |
-| POST | `/api/login/:id` | `{password}` — login by id |
-| POST | `/api/login/:id/quick` | `{char}` — quick login by first character |
-| POST | `/api/admin/login` | Same as `/api/login`, rejects non-admins |
-| POST | `/api/logout` | — |
-| GET  | `/api/me` | Current user (includes `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
-| GET  | `/api/config` | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }` |
-| GET  | `/api/users/by-name/:name` | `{ id, name, targetUrl }` |
+| Method | Path                       | Description                                                                         |
+| ------ | -------------------------- | ----------------------------------------------------------------------------------- |
+| POST   | `/api/login`               | `{name, password}`                                                                  |
+| POST   | `/api/login/:id`           | `{password}` — login by id                                                          |
+| POST   | `/api/login/:id/quick`     | `{char}` — quick login by first character                                           |
+| POST   | `/api/admin/login`         | Same as `/api/login`, rejects non-admins                                            |
+| POST   | `/api/logout`              | —                                                                                   |
+| GET    | `/api/me`                  | Current user (includes `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
+| GET    | `/api/config`              | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }`                      |
+| GET    | `/api/users/by-name/:name` | `{ id, name, targetUrl }`                                                           |
 
 ### User (session required)
 
-| Method | Path | Body / response |
-| --- | --- | --- |
-| PUT | `/api/me/url` | `{ url: string }` |
-| PUT | `/api/me/password` | `{ password: string }` |
-| PUT | `/api/me/api-keys` | `{ apiKeys: string[] }` |
-| PUT | `/api/me/prompts` | `{ prompts: {id,name,text}[], activePromptId?: string }` |
-| PUT | `/api/me/models` | `{ enabledModels: string[], activeModel?: string }` (filtered against `KNOWN_MODELS`) |
-| PUT | `/api/me/active-model` | `{ activeModel: string }` — must be in `enabledModels` |
-| GET | `/api/me/files` | `[{id, name, mime, size, createdAt}]` |
-| POST | `/api/me/files` | `{ name, mime, dataBase64 }` → file metadata (30 MB cap) |
-| DELETE | `/api/me/files/:id` | `204`, also clears the URI cache in `gemini.ts` |
-| POST | `/api/gemini/solve` | `{ imageBase64: string }` → `{ answer }`. Prompt / models / PDFs come from the DB |
+| Method | Path                   | Body / response                                                                       |
+| ------ | ---------------------- | ------------------------------------------------------------------------------------- |
+| PUT    | `/api/me/url`          | `{ url: string }`                                                                     |
+| PUT    | `/api/me/password`     | `{ password: string }`                                                                |
+| PUT    | `/api/me/api-keys`     | `{ apiKeys: string[] }`                                                               |
+| PUT    | `/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                              |
+| PUT    | `/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (filtered against `KNOWN_MODELS`) |
+| PUT    | `/api/me/active-model` | `{ activeModel: string }` — must be in `enabledModels`                                |
+| GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                 |
+| POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → file metadata (30 MB cap)                              |
+| DELETE | `/api/me/files/:id`    | `204`, also clears the URI cache in `gemini.ts`                                       |
+| POST   | `/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Prompt / models / PDFs come from the DB     |
 
 ### Admin (`isAdmin=true`)
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/users` | List all |
-| POST | `/api/users` | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
-| GET | `/api/users/:id` | Single user |
-| PUT | `/api/users/:id` | Partial update |
-| DELETE | `/api/users/:id` | — |
+| Method | Path             | Description                                        |
+| ------ | ---------------- | -------------------------------------------------- |
+| GET    | `/api/users`     | List all                                           |
+| POST   | `/api/users`     | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
+| GET    | `/api/users/:id` | Single user                                        |
+| PUT    | `/api/users/:id` | Partial update                                     |
+| DELETE | `/api/users/:id` | —                                                  |
 
 ## Security
 
@@ -349,7 +429,7 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 - **Sessions** are in-memory `Map`; restarts invalidate every session. Cookie: `HttpOnly; SameSite=Lax; Path=/`.
 - **The proxy** strips `X-Frame-Options`, `Content-Security-Policy[-Report-Only]`, `Strict-Transport-Security`, `Feature-Policy` from upstream responses and injects its own `Permissions-Policy`.
 - **Target cookies** with `Domain=...`, `Secure`, `SameSite=*` are normalised (forced `SameSite=Lax`, no `Domain`/`Secure`). The session cookie name (`uix_session`) is never forwarded upstream.
-- **Path traversal** for static is blocked by `target.startsWith(root)` in `safeStaticPath`.
+- **Path traversal** for static is blocked by `target.startsWith(root)` in `safeJsPath` ([server-static.ts](scripts/server-static.ts)).
 
 ## Running
 
@@ -372,7 +452,7 @@ npm start
 ## Dependencies
 
 - **Runtime**: [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3), [`@google/genai`](https://www.npmjs.com/package/@google/genai) — the official Gemini API SDK (Files API + `generateContent`)
-- **Dev/build**: `tsx`, `typescript`, `@types/node`, `@types/better-sqlite3`
+- **Dev/build**: `tsx`, `typescript`, `@types/node`, `@types/better-sqlite3`, `sass` (compiles [styles/style.scss](styles/style.scss) → `public/style.css`), `posthtml` + `posthtml-include` + `posthtml-expressions` (build `pages/*.html` → `public/*.html`)
 - **Client CDN** (no npm): [html2canvas 1.4.1](https://cdnjs.com/libraries/html2canvas) — for the iframe screenshot
 
 bcrypt and Angular have been removed from the project entirely.
