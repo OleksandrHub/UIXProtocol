@@ -50,8 +50,8 @@ async function enterAuthed(me, { fromLogin }) {
   applyAppearance(await fetchAppearance());
 
   document.body.classList.remove('locked');
-  const loginForm = document.getElementById('loginForm');
-  if (loginForm) loginForm.hidden = true;
+  const prompt = document.getElementById('quicklogin');
+  if (prompt) prompt.hidden = true;
 
   const bar = document.getElementById('bar');
   bar.hidden = false;
@@ -247,48 +247,54 @@ async function initLogin() {
   document.body.classList.add('locked');
   frame.src = `/_p/${id}/`;
 
-  const form = document.getElementById('loginForm');
-  form.hidden = false;
-  const pass = document.getElementById('loginPassword');
-  pass.maxLength = 1;
-  pass.focus();
+  const prompt = document.getElementById('quicklogin');
+  prompt.hidden = false;
 
   let busy = false;
 
   const showWrong = () => {
-    pass.classList.remove('shake', 'wrong');
-    void pass.offsetWidth;
-    pass.classList.add('wrong', 'shake');
-    pass.value = '';
-    pass.focus();
+    prompt.classList.remove('shake', 'wrong');
+    void prompt.offsetWidth;
+    prompt.classList.add('wrong', 'shake');
   };
 
   const tryLogin = async (char) => {
     if (busy) return;
     busy = true;
-    pass.disabled = true;
+    prompt.classList.add('is-busy');
     try {
       const user = await api(`/login/${id}/quick`, {
         method: 'POST',
         body: JSON.stringify({ char }),
       });
-      pass.value = '';
       await enterAuthed(user, { fromLogin: true });
     } catch {
-      pass.disabled = false;
       showWrong();
     } finally {
       busy = false;
+      prompt.classList.remove('is-busy');
     }
   };
 
-  pass.addEventListener('input', () => {
-    pass.classList.remove('shake', 'wrong');
-    if (pass.value.length === 1) tryLogin(pass.value);
-  });
-
-  form.addEventListener('submit', (e) => {
+  const handleKey = (e) => {
+    if (prompt.hidden || busy) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (!e.key || e.key.length !== 1) return;
     e.preventDefault();
-    if (pass.value.length === 1) tryLogin(pass.value);
-  });
+    e.stopPropagation();
+    prompt.classList.remove('wrong', 'shake');
+    tryLogin(e.key);
+  };
+
+  window.addEventListener('keydown', handleKey, true);
+
+  const attachToFrame = () => {
+    try {
+      const fdoc = frame.contentDocument;
+      if (!fdoc) return;
+      fdoc.addEventListener('keydown', handleKey, true);
+    } catch {}
+  };
+  frame.addEventListener('load', attachToFrame);
+  attachToFrame();
 }
