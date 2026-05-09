@@ -9,143 +9,15 @@
       <button type="button" class="tab" data-tab="appearance">Вигляд</button>
     </nav>
 
-    <section class="tab-panel" data-panel="general">
-      <label
-        >URL сайту
-        <input id="urlInput" type="text" placeholder="https://example.com" />
-      </label>
-      <label
-        >API ключі (по одному на рядок)
-        <textarea id="keysInput" rows="4"></textarea>
-      </label>
-      <label
-        >Новий пароль (порожньо — не змінювати)
-        <input id="passInput" type="password" />
-      </label>
-    </section>
+    <include src="partials/user/modal-settings/general.html"></include>
 
-    <section class="tab-panel" data-panel="prompts" hidden>
-      <div class="prompts" id="promptsList"></div>
-      <button type="button" class="btn-secondary" id="promptAddBtn">+ Додати промт</button>
-    </section>
+    <include src="partials/user/modal-settings/promts.html"></include>
 
-    <section class="tab-panel" data-panel="models" hidden>
-      <p class="hint">
-        Активна модель перемикається на наступну з обраних через <kbd>Alt</kbd>+<kbd>C</kbd>.
-      </p>
-      <div class="models" id="modelsList"></div>
-    </section>
+    <include src="partials/user/modal-settings/models.html"></include>
 
-    <section class="tab-panel" data-panel="files" hidden>
-      <p class="hint">
-        Файли (PDF, зображення, текст, аудіо, відео тощо) передаються в Gemini як контекст разом зі
-        скріншотом.
-      </p>
-      <div class="files" id="filesList"></div>
-      <label class="file-add">
-        <input type="file" id="fileInput" multiple hidden />
-        <button type="button" class="btn-secondary" id="fileAddBtn">+ Прикріпити файл</button>
-      </label>
-    </section>
+    <include src="partials/user/modal-settings/files.html"></include>
 
-    <section class="tab-panel" data-panel="appearance" hidden>
-      <h3>Відповідь Gemini</h3>
-      <div class="grid-2">
-        <label
-          >Шрифт
-          <input type="text" id="apResultFont" placeholder="system-ui" />
-        </label>
-        <label
-          >Розмір (px)
-          <input type="number" id="apResultSize" min="8" max="64" />
-        </label>
-        <label class="color-row"
-          >Колір тексту
-          <span class="color-row__inputs">
-            <input type="color" id="apResultColor" />
-            <input
-              type="range"
-              id="apResultColorOpacity"
-              min="0"
-              max="100"
-              step="1"
-              title="Прозорість тексту"
-            />
-            <output id="apResultColorOpacityOut" class="opacity-out">100%</output>
-          </span>
-        </label>
-        <label class="color-row"
-          >Колір фону
-          <span class="color-row__inputs">
-            <input type="color" id="apResultBg" />
-            <input
-              type="range"
-              id="apResultBgOpacity"
-              min="0"
-              max="100"
-              step="1"
-              title="Прозорість фону"
-            />
-            <output id="apResultBgOpacityOut" class="opacity-out">0%</output>
-          </span>
-        </label>
-      </div>
-
-      <h3>Кнопка S (скріншот)</h3>
-      <div class="grid-2">
-        <label
-          >Шрифт
-          <input type="text" id="apBtnFont" placeholder="system-ui" />
-        </label>
-        <label
-          >Розмір (px)
-          <input type="number" id="apBtnSize" min="8" max="64" />
-        </label>
-        <label class="color-row"
-          >Колір тексту
-          <span class="color-row__inputs">
-            <input type="color" id="apBtnColor" />
-            <input
-              type="range"
-              id="apBtnColorOpacity"
-              min="0"
-              max="100"
-              step="1"
-              title="Прозорість тексту"
-            />
-            <output id="apBtnColorOpacityOut" class="opacity-out">100%</output>
-          </span>
-        </label>
-        <label class="color-row"
-          >Колір фону
-          <span class="color-row__inputs">
-            <input type="color" id="apBtnBg" />
-            <input
-              type="range"
-              id="apBtnBgOpacity"
-              min="0"
-              max="100"
-              step="1"
-              title="Прозорість фону"
-            />
-            <output id="apBtnBgOpacityOut" class="opacity-out">0%</output>
-          </span>
-        </label>
-      </div>
-
-      <p class="hint">Прозорість 0% — повністю прозоро, 100% — без прозорості.</p>
-
-      <h3>Індикатори</h3>
-      <label class="check"
-        ><input type="checkbox" id="apShowFilesStatus" /> Показувати статус файлів (📎)</label
-      >
-      <label class="check"
-        ><input type="checkbox" id="apShowModelToast" /> Показувати тост моделі (зміна через
-        Alt+C)</label
-      >
-
-      <button type="button" class="btn-secondary" id="apResetBtn">Скинути до дефолтних</button>
-    </section>
+    <include src="partials/user/modal-settings/appearance.html"></include>
 
     <div class="error" id="settingsError"></div>
     <div class="modal__actions">

@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "npm run build && node dist/server.js",
-    "dev": "npm run build:assets && tsx ./scripts/server.ts",
+    "start": "npm run build:assets && tsx ./scripts/server.ts",
     "build": "npm run build:assets && tsc",
     "build:assets": "npm run build:html && npm run build:css",
     "build:html": "tsx ./scripts/build-html.ts",

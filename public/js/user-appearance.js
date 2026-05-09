@@ -1,0 +1,49 @@
+export const APPEARANCE_KEY = 'uix.appearance';
+
+export const APPEARANCE_DEFAULTS = {
+  resultFont: '',
+  resultSize: 11,
+  resultColor: '#404040',
+  resultColorOpacity: 40,
+  resultBg: '#ffffff',
+  resultBgOpacity: 0,
+  btnFont: '',
+  btnSize: 14,
+  btnColor: '#1a1a1a',
+  btnColorOpacity: 25,
+  btnBg: '#ffffff',
+  btnBgOpacity: 0,
+  showFilesStatus: true,
+  showModelToast: true,
+};
+
+export function hexToRgba(hex, opacityPct) {
+  const a = Math.max(0, Math.min(100, Number(opacityPct ?? 100))) / 100;
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return `rgba(0,0,0,${a})`;
+  const r = parseInt(m[1].slice(0, 2), 16);
+  const g = parseInt(m[1].slice(2, 4), 16);
+  const b = parseInt(m[1].slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+export function loadAppearance() {
+  try {
+    const raw = localStorage.getItem(APPEARANCE_KEY);
+    return raw ? { ...APPEARANCE_DEFAULTS, ...JSON.parse(raw) } : { ...APPEARANCE_DEFAULTS };
+  } catch {
+    return { ...APPEARANCE_DEFAULTS };
+  }
+}
+
+export function applyAppearance(a) {
+  const root = document.documentElement.style;
+  root.setProperty('--result-font', a.resultFont || 'inherit');
+  root.setProperty('--result-size', `${Number(a.resultSize) || 11}px`);
+  root.setProperty('--result-color', hexToRgba(a.resultColor, a.resultColorOpacity ?? 100));
+  root.setProperty('--result-bg', hexToRgba(a.resultBg, a.resultBgOpacity ?? 0));
+  root.setProperty('--screenshot-font', a.btnFont || 'inherit');
+  root.setProperty('--screenshot-size', `${Number(a.btnSize) || 14}px`);
+  root.setProperty('--screenshot-color', hexToRgba(a.btnColor, a.btnColorOpacity ?? 100));
+  root.setProperty('--screenshot-bg', hexToRgba(a.btnBg, a.btnBgOpacity ?? 0));
+}
