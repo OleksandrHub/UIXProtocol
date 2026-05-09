@@ -13,16 +13,5 @@
     "lib": ["es2022"],
     "types": ["node"]
   },
-  "include": [
-    "scripts/server.ts",
-    "scripts/api.ts",
-    "scripts/db.ts",
-    "scripts/session.ts",
-    "scripts/sgemini.ts",
-    "scripts/create-admin.ts",
-    "scripts/build-html.ts",
-    "scripts/constants.ts",
-    "scripts/types.ts",
-    "environments/**/*.ts"
-  ]
+  "include": ["scripts/**/*.ts", "environments/**/*.ts"]
 }

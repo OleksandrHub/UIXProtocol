@@ -1,38 +1,4 @@
-export interface UserPrompt {
-  id: string;
-  name: string;
-  text: string;
-}
-
-export interface UserFileMeta {
-  id: number;
-  name: string;
-  mime: string;
-  size: number;
-  createdAt: number;
-}
-
-export interface UserFile extends UserFileMeta {
-  data: Buffer;
-}
-
-export interface UploadedFile {
-  uri: string;
-  mimeType: string;
-  expiresAt: number;
-}
-
-export interface User {
-  id: number;
-  name: string;
-  apiKeys: string[];
-  isAdmin: boolean;
-  targetUrl: string;
-  prompts: UserPrompt[];
-  activePromptId: string;
-  enabledModels: string[];
-  activeModel: string;
-}
+// db.ts
 
 export interface CreateUserInput {
   name: string;
@@ -54,18 +20,44 @@ export interface UpdateUserInput {
   activeModel?: string;
 }
 
-export interface SolveOptions {
+export interface User {
+  id: number;
+  name: string;
   apiKeys: string[];
-  imageBase64: string;
-  prompt: string;
-  models: string[];
-  files: UserFile[];
+  isAdmin: boolean;
+  targetUrl: string;
+  prompts: UserPrompt[];
+  activePromptId: string;
+  enabledModels: string[];
+  activeModel: string;
 }
 
-export interface PreloadResult {
-  cached: number;
-  total: number;
-  errors: Array<{ fileId: number; apiKey: string; message: string }>;
+export interface UserFile extends UserFileMeta {
+  data: Buffer;
+}
+
+export interface UserFileMeta {
+  id: number;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: number;
+}
+
+export interface UserFileRow {
+  id: number;
+  user_id: number;
+  name: string;
+  mime: string;
+  size: number;
+  data: Buffer;
+  created_at: number;
+}
+
+export interface UserPrompt {
+  id: string;
+  name: string;
+  text: string;
 }
 
 export interface UserRow {
@@ -80,4 +72,34 @@ export interface UserRow {
   active_prompt_id: string;
   enabled_models: string;
   active_model: string;
+}
+
+// gemini.ts
+
+export interface SolveOptions {
+  apiKeys: string[];
+  imageBase64: string;
+  prompt: string;
+  models: string[];
+  files: UserFile[];
+}
+
+export interface PreloadResult {
+  cached: number;
+  total: number;
+  errors: Array<{ fileId: number; apiKey: string; message: string }>;
+}
+
+export interface UploadedFile {
+  uri: string;
+  mimeType: string;
+  expiresAt: number;
+}
+
+// server.ts
+
+export interface ProxyOpts {
+  sendCookies?: boolean;
+  stripSetCookie?: boolean;
+  setPreviewCookie?: number;
 }
