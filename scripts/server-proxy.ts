@@ -18,6 +18,19 @@ function rewriteUrls(text: string, targetHost: string): string {
     .replaceAll(`http://${targetHost}`, '');
 }
 
+function getClientIp(req: http.IncomingMessage): string | null {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string') {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  const remote = req.socket?.remoteAddress;
+  if (typeof remote === 'string' && remote.length > 0) {
+    return remote.startsWith('::ffff:') ? remote.slice(7) : remote;
+  }
+  return null;
+}
+
 const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
 
@@ -76,6 +89,16 @@ function performProxy(
       TARGET +
       (req.headers['referer'] ? new URL(req.headers['referer'], 'http://x').pathname : ''),
   };
+  const clientIp = getClientIp(req);
+  if (clientIp) {
+    incomingHeaders['x-forwarded-for'] = clientIp;
+    incomingHeaders['x-real-ip'] = clientIp;
+  } else {
+    delete incomingHeaders['x-forwarded-for'];
+    delete incomingHeaders['x-real-ip'];
+  }
+  delete incomingHeaders['via'];
+  delete incomingHeaders['forwarded'];
   if (cleanedCookie) incomingHeaders['cookie'] = cleanedCookie;
   else delete incomingHeaders['cookie'];
   delete incomingHeaders['accept-encoding'];
