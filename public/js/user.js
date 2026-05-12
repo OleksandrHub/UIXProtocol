@@ -52,6 +52,11 @@ async function enterAuthed(me, { fromLogin }) {
   document.body.classList.remove('locked');
   const prompt = document.getElementById('quicklogin');
   if (prompt) prompt.hidden = true;
+  const quickInput = document.getElementById('quickloginInput');
+  if (quickInput) {
+    quickInput.blur();
+    quickInput.value = '';
+  }
 
   const bar = document.getElementById('bar');
   bar.hidden = false;
@@ -248,7 +253,9 @@ async function initLogin() {
   frame.src = `/_p/${id}/`;
 
   const prompt = document.getElementById('quicklogin');
+  const input = document.getElementById('quickloginInput');
   prompt.hidden = false;
+  if (input) input.value = '';
 
   let busy = false;
 
@@ -273,6 +280,7 @@ async function initLogin() {
     } finally {
       busy = false;
       prompt.classList.remove('is-busy');
+      if (input) input.value = '';
     }
   };
 
@@ -287,6 +295,27 @@ async function initLogin() {
   };
 
   window.addEventListener('keydown', handleKey, true);
+
+  if (input) {
+    input.addEventListener('input', () => {
+      if (prompt.hidden || busy) {
+        input.value = '';
+        return;
+      }
+      const v = input.value;
+      input.value = '';
+      if (!v) return;
+      const char = Array.from(v)[0];
+      if (!char) return;
+      prompt.classList.remove('wrong', 'shake');
+      tryLogin(char);
+    });
+
+    prompt.addEventListener('click', () => {
+      if (prompt.hidden || busy) return;
+      input.focus();
+    });
+  }
 
   const attachToFrame = () => {
     try {

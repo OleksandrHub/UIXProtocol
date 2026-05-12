@@ -45,20 +45,28 @@ export function initGemini() {
     return win.html2canvas;
   };
 
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+
   const captureFrame = async () => {
     const { win, doc } = getFrameWindow();
     const h2c = await ensureHtml2Canvas(win);
+    await nextFrame();
+    await nextFrame();
     const root = doc.body || doc.documentElement;
+    const width = Math.max(1, win.innerWidth || doc.documentElement.clientWidth || 1);
+    const height = Math.max(1, win.innerHeight || doc.documentElement.clientHeight || 1);
+    const windowWidth = Math.max(width, doc.documentElement.scrollWidth || width);
+    const windowHeight = Math.max(height, doc.documentElement.scrollHeight || height);
     return h2c(root, {
       useCORS: true,
       allowTaint: true,
       scale: 1,
       x: win.scrollX || 0,
       y: win.scrollY || 0,
-      width: win.innerWidth,
-      height: win.innerHeight,
-      windowWidth: doc.documentElement.scrollWidth,
-      windowHeight: doc.documentElement.scrollHeight,
+      width,
+      height,
+      windowWidth,
+      windowHeight,
       logging: false,
       backgroundColor: '#ffffff',
     });
@@ -103,6 +111,7 @@ export function initGemini() {
       showResult(answer || '—');
       onAfterSolve?.();
     } catch (e) {
+      console.error('[screenshot]', e);
       showResult('e');
     } finally {
       busy = false;
