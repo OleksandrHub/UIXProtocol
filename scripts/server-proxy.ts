@@ -18,6 +18,20 @@ function rewriteUrls(text: string, targetHost: string): string {
     .replaceAll(`http://${targetHost}`, '');
 }
 
+const PERMISSIVE_VIEWPORT =
+  '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
+
+function rewriteViewport(html: string): string {
+  const viewportRe = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
+  if (viewportRe.test(html)) {
+    return html.replace(viewportRe, PERMISSIVE_VIEWPORT);
+  }
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b([^>]*)>/i, `<head$1>${PERMISSIVE_VIEWPORT}`);
+  }
+  return html;
+}
+
 function performProxy(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -121,10 +135,9 @@ function performProxy(
         const chunks: Buffer[] = [];
         proxyRes.on('data', (c: Buffer) => chunks.push(c));
         proxyRes.on('end', () => {
-          const body = Buffer.from(
-            rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost),
-            'utf-8'
-          );
+          let text = rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
+          if (ct.includes('text/html')) text = rewriteViewport(text);
+          const body = Buffer.from(text, 'utf-8');
           headers['content-length'] = body.length;
           res.writeHead(proxyRes.statusCode ?? 502, headers);
           res.end(body);
