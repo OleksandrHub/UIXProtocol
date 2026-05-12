@@ -343,7 +343,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 1. `getFrameWindow()` бере `iframe.contentWindow`/`contentDocument`. Cross-origin → одразу `Error('iframe недоступний')`.
 2. `ensureHtml2Canvas(win)` — підключає [html2canvas 1.4.1](https://html2canvas.hertzen.com/) із CDN у `iframe.contentDocument` (на самій сторінці воно вже є — підвантажене з `<script>` у [pages/user.html](pages/user.html)).
-3. `captureFrame()` — `html2canvas` із `useCORS`, `allowTaint`, видимою областю (`scrollX/scrollY` + `innerWidth/innerHeight`).
+3. `captureFrame()` — `html2canvas` із `useCORS`, `allowTaint`. Захоплюється **повна ширина сайту** (`documentElement.scrollWidth`, з `x: 0`) і лише **висота вьюпорта** (`innerHeight`, з `y: scrollY`) — тобто якщо проксійований сайт ширший за екран телефона, у скріншот потрапляє все, що праворуч за межами видимої області, а вертикально — те, що навколо поточної позиції скролу.
 4. `canvasToBase64Jpeg()` — даунскейл до **1600 px** по ширині, JPEG quality **0.7**, base64.
 5. `POST /api/gemini/solve` із одним лише `imageBase64`. Активний промт, активна модель і прикріплені файли беруться сервером із даних користувача в БД.
 6. Відповідь показується в `.gemini-result`.
