@@ -348,7 +348,7 @@ Client side (`initGemini` in [public/js/user-gemini.js](public/js/user-gemini.js
 
 1. `getFrameWindow()` grabs `iframe.contentWindow` / `contentDocument`. Cross-origin → immediate `Error('iframe недоступний')`.
 2. `ensureHtml2Canvas(win)` — injects [html2canvas 1.4.1](https://html2canvas.hertzen.com/) from CDN into `iframe.contentDocument` (the outer page already has it, included via `<script>` in [pages/user.html](pages/user.html)).
-3. `captureFrame()` — `html2canvas` with `useCORS`, `allowTaint`, viewport area (`scrollX/scrollY` + `innerWidth/innerHeight`).
+3. `captureFrame()` — `html2canvas` with `useCORS`, `allowTaint`. Captures the **full site width** (`documentElement.scrollWidth`, with `x: 0`) but only the **viewport height** (`innerHeight`, with `y: scrollY`) — so if the proxied site is wider than the phone screen, everything past the right edge is included in the screenshot, while vertically it's just the area around the current scroll position.
 4. `canvasToBase64Jpeg()` — downscales to **1600 px** width, JPEG quality **0.7**, base64.
 5. `POST /api/gemini/solve` with just `imageBase64`. The active prompt, active model, and file attachments are pulled from the user record on the server.
 6. The answer is rendered into `.gemini-result`.
