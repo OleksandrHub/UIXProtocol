@@ -53,20 +53,21 @@ export function initGemini() {
     await nextFrame();
     await nextFrame();
     const root = doc.body || doc.documentElement;
-    const width = Math.max(1, win.innerWidth || doc.documentElement.clientWidth || 1);
-    const height = Math.max(1, win.innerHeight || doc.documentElement.clientHeight || 1);
-    const windowWidth = Math.max(width, doc.documentElement.scrollWidth || width);
-    const windowHeight = Math.max(height, doc.documentElement.scrollHeight || height);
+    const viewportH = Math.max(1, win.innerHeight || doc.documentElement.clientHeight || 1);
+    const fullW = Math.max(
+      1,
+      doc.documentElement.scrollWidth || win.innerWidth || doc.documentElement.clientWidth || 1
+    );
     return h2c(root, {
       useCORS: true,
       allowTaint: true,
       scale: 1,
-      x: win.scrollX || 0,
+      x: 0,
       y: win.scrollY || 0,
-      width,
-      height,
-      windowWidth,
-      windowHeight,
+      width: fullW,
+      height: viewportH,
+      windowWidth: fullW,
+      windowHeight: viewportH,
       logging: false,
       backgroundColor: '#ffffff',
     });
