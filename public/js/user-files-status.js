@@ -9,7 +9,7 @@ export function initFilesStatus() {
   const closeBtn = document.getElementById('filesStatusClose');
   let lastStatus = null;
 
-  const isVisibleByPrefs = () => loadAppearance().showFilesStatus !== false;
+  const isVisibleByPrefs = () => loadAppearance().showFilesStatus === true;
 
   const setState = (cls) => {
     wrap.classList.remove('is-ready', 'is-pending', 'is-error', 'is-loading');

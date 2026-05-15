@@ -217,8 +217,8 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     ap.btnColorOpacity.value = a.btnColorOpacity ?? 100;
     ap.btnBg.value = a.btnBg || '#ffffff';
     ap.btnBgOpacity.value = a.btnBgOpacity ?? 0;
-    ap.showFilesStatus.checked = a.showFilesStatus !== false;
-    ap.showModelToast.checked = a.showModelToast !== false;
+    ap.showFilesStatus.checked = a.showFilesStatus === true;
+    ap.showModelToast.checked = a.showModelToast === true;
     updateOpacityLabels();
   };
 

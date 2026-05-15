@@ -3,6 +3,7 @@ import {
   APPEARANCE_DEFAULTS,
   applyAppearance,
   fetchAppearance,
+  loadAppearance,
 } from './user-appearance.js';
 import { initGemini } from './user-gemini.js';
 import { initFilesStatus } from './user-files-status.js';
@@ -35,7 +36,7 @@ function initModelToast() {
   let hideTimer = null;
   let fadeTimer = null;
   return (text) => {
-    if (loadAppearance().showModelToast === false) return;
+    if (loadAppearance().showModelToast !== true) return;
     el.textContent = text;
     el.hidden = false;
     el.classList.remove('is-fading');
