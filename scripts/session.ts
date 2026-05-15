@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { SESSION_COOKIE_NAME } from './constants';
+import { PREVIEW_COOKIE, SESSION_COOKIE_NAME } from './constants';
 import { environment } from '../environments/environment';
 
 const sessions = new Map<string, { userId: number; expiresAt: number }>();
@@ -36,10 +36,10 @@ export function getSessionUserId(req: IncomingMessage): number | null {
 export function setSession(res: ServerResponse, userId: number): void {
   const id = crypto.randomBytes(24).toString('base64url');
   sessions.set(id, { userId, expiresAt: Date.now() + environment.sessionTtlMs });
-  res.setHeader(
-    'Set-Cookie',
-    `${SESSION_COOKIE_NAME}=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(environment.sessionTtlMs / 1000)}`
-  );
+  res.setHeader('Set-Cookie', [
+    `${SESSION_COOKIE_NAME}=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(environment.sessionTtlMs / 1000)}`,
+    `${PREVIEW_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
+  ]);
 }
 
 export function clearSessionsForUser(userId: number): void {
