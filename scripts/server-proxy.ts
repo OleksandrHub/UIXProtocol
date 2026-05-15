@@ -63,7 +63,9 @@ function performProxy(
     const filtered = cookieHeader
       .split(';')
       .map((s) => s.trim())
-      .filter((s) => !s.startsWith(`${SESSION_COOKIE_NAME}=`))
+      .filter(
+        (s) => !s.startsWith(`${SESSION_COOKIE_NAME}=`) && !s.startsWith(`${PREVIEW_COOKIE}=`)
+      )
       .join('; ');
     cleanedCookie = filtered || undefined;
   }
@@ -177,13 +179,7 @@ export function proxyForUser(
     res.end('No target URL set for this user');
     return;
   }
-  performProxy(
-    req,
-    res,
-    target,
-    reqPath,
-    preview ? { sendCookies: false, stripSetCookie: true, setPreviewCookie: userId } : {}
-  );
+  performProxy(req, res, target, reqPath, preview ? { setPreviewCookie: userId } : {});
 }
 
 function getCookiePreviewId(req: http.IncomingMessage): number | null {
