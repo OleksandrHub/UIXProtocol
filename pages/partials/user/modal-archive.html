@@ -1,33 +1,71 @@
 <div class="modal" id="archive" hidden>
-  <div class="modal__card modal__card--wide">
-    <h2>Архів питань</h2>
+  <div class="modal__card modal__card--archive">
+    <div class="archive-main">
+      <h2>Архів питань</h2>
 
-    <div class="archive-toolbar">
-      <label class="check archive-selall">
-        <input type="checkbox" id="archiveSelectAll" /> Обрати всі
-      </label>
-      <span class="archive-toolbar__spacer"></span>
-      <button type="button" class="btn-secondary" id="archiveExportTxt">Експорт TXT</button>
-      <button type="button" class="btn-secondary" id="archiveExportPdf">Експорт PDF</button>
+      <div class="archive-toolbar">
+        <label class="check archive-selall">
+          <input type="checkbox" id="archiveSelectAll" /> Обрати всі
+        </label>
+        <span class="archive-selcount" id="archiveSelCount">обрано: 0</span>
+        <span class="archive-toolbar__spacer"></span>
+        <label class="archive-pagesize"
+          >Тег
+          <select id="archiveTagFilter">
+            <option value="">усі</option>
+          </select>
+        </label>
+        <label class="archive-pagesize"
+          >На сторінці
+          <select id="archivePageSize">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+          </select>
+        </label>
+        <button type="button" class="btn-secondary" id="archiveExportTxt">Експорт TXT</button>
+        <button type="button" class="btn-secondary" id="archiveExportPdf">Експорт PDF</button>
+      </div>
+
+      <div class="archive-share">
+        <input
+          type="text"
+          id="archiveShareUser"
+          list="archiveUsersDatalist"
+          placeholder="Імʼя користувача для поширення"
+          autocomplete="off"
+        />
+        <datalist id="archiveUsersDatalist"></datalist>
+        <button type="button" class="btn-secondary" id="archiveShareBtn">
+          Поділитися обраним
+        </button>
+      </div>
+
+      <div class="archive-list" id="archiveList"></div>
+      <div class="archive-empty" id="archiveEmpty" hidden>Архів порожній.</div>
+
+      <div class="archive-pager" id="archivePager" hidden>
+        <button type="button" class="btn-secondary" id="archivePrev">← Назад</button>
+        <span class="archive-pager__info" id="archivePagerInfo">1 / 1</span>
+        <button type="button" class="btn-secondary" id="archiveNext">Далі →</button>
+      </div>
+
+      <div class="error" id="archiveError"></div>
+      <div class="modal__actions">
+        <button type="button" id="archiveClose">Закрити</button>
+      </div>
     </div>
 
-    <div class="archive-share">
+    <aside class="archive-users">
+      <h3>Користувачі</h3>
       <input
         type="text"
-        id="archiveShareUser"
-        placeholder="Імʼя користувача для поширення"
+        id="archiveUserSearch"
+        placeholder="Пошук користувача…"
         autocomplete="off"
       />
-      <button type="button" class="btn-secondary" id="archiveShareBtn">Поділитися обраним</button>
-    </div>
-
-    <div class="archive-list" id="archiveList"></div>
-    <div class="archive-empty" id="archiveEmpty" hidden>Архів порожній.</div>
-
-    <div class="error" id="archiveError"></div>
-    <div class="modal__actions">
-      <button type="button" id="archiveClose">Закрити</button>
-    </div>
+      <div class="archive-users__list" id="archiveUsersList"></div>
+    </aside>
   </div>
 </div>
 
@@ -54,6 +92,10 @@
     <label class="archive-field"
       >Правильна відповідь
       <input type="text" class="archive-correct" />
+    </label>
+    <label class="archive-field"
+      >Теги (через кому)
+      <input type="text" class="archive-tags" placeholder="напр. історія, тест 1" />
     </label>
     <div class="archive-item__actions">
       <button type="button" class="btn-secondary archive-save">Зберегти</button>

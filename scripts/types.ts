@@ -65,6 +65,7 @@ export interface QuestionMeta {
   question: string;
   options: string[];
   correctAnswer: string;
+  tags: string[];
   createdAt: number;
 }
 
@@ -76,6 +77,7 @@ export interface QuestionRow {
   question: string;
   options: string;
   correct_answer: string;
+  tags: string;
   created_at: number;
 }
 

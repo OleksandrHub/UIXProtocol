@@ -8,6 +8,7 @@ function rowToMeta(row: QuestionRow): QuestionMeta {
     question: row.question,
     options: safeParseArray<string>(row.options),
     correctAnswer: row.correct_answer,
+    tags: safeParseArray<string>(row.tags),
     createdAt: row.created_at,
   };
 }
@@ -15,7 +16,7 @@ function rowToMeta(row: QuestionRow): QuestionMeta {
 export function listQuestions(userId: number): QuestionMeta[] {
   const rows = db
     .prepare(
-      `SELECT id, user_id, mime, question, options, correct_answer, created_at
+      `SELECT id, user_id, mime, question, options, correct_answer, tags, created_at
        FROM user_questions WHERE user_id = ? ORDER BY id DESC`,
     )
     .all(userId) as QuestionRow[];
@@ -29,11 +30,13 @@ export function addQuestion(
   question: string,
   options: string[],
   correctAnswer: string,
+  tags: string[] = [],
 ): QuestionMeta {
   const info = db
     .prepare(
-      `INSERT INTO user_questions (user_id, image, mime, question, options, correct_answer, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO user_questions
+         (user_id, image, mime, question, options, correct_answer, tags, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       userId,
@@ -42,6 +45,7 @@ export function addQuestion(
       question ?? '',
       JSON.stringify(Array.isArray(options) ? options : []),
       correctAnswer ?? '',
+      JSON.stringify(Array.isArray(tags) ? tags : []),
       Date.now(),
     );
   const row = db
@@ -61,7 +65,7 @@ export function getQuestionImage(userId: number, id: number): QuestionImage | nu
 export function updateQuestion(
   userId: number,
   id: number,
-  patch: { question?: string; options?: string[]; correctAnswer?: string },
+  patch: { question?: string; options?: string[]; correctAnswer?: string; tags?: string[] },
 ): QuestionMeta | null {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -77,6 +81,10 @@ export function updateQuestion(
     sets.push('correct_answer = ?');
     params.push(patch.correctAnswer);
   }
+  if (patch.tags !== undefined) {
+    sets.push('tags = ?');
+    params.push(JSON.stringify(Array.isArray(patch.tags) ? patch.tags : []));
+  }
   if (sets.length) {
     params.push(id, userId);
     const info = db
@@ -86,7 +94,7 @@ export function updateQuestion(
   }
   const row = db
     .prepare(
-      `SELECT id, user_id, mime, question, options, correct_answer, created_at
+      `SELECT id, user_id, mime, question, options, correct_answer, tags, created_at
        FROM user_questions WHERE id = ? AND user_id = ?`,
     )
     .get(id, userId) as QuestionRow | undefined;
@@ -117,13 +125,23 @@ export function shareQuestions(
     .all(fromUserId, ...ids) as QuestionRow[];
   if (!rows.length) return 0;
   const insert = db.prepare(
-    `INSERT INTO user_questions (user_id, image, mime, question, options, correct_answer, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO user_questions
+       (user_id, image, mime, question, options, correct_answer, tags, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const tx = db.transaction((list: QuestionRow[]) => {
     const now = Date.now();
     for (const r of list) {
-      insert.run(toUserId, r.image, r.mime, r.question, r.options, r.correct_answer, now);
+      insert.run(
+        toUserId,
+        r.image,
+        r.mime,
+        r.question,
+        r.options,
+        r.correct_answer,
+        r.tags ?? '[]',
+        now,
+      );
     }
     return list.length;
   });
