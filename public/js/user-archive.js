@@ -52,14 +52,29 @@ export function initArchive() {
   const errEl = document.getElementById('archiveError');
   const tpl = document.getElementById('archiveItemTpl');
   const selectAll = document.getElementById('archiveSelectAll');
+  const selCount = document.getElementById('archiveSelCount');
+  const pageSizeSel = document.getElementById('archivePageSize');
+  const tagFilter = document.getElementById('archiveTagFilter');
+  const pager = document.getElementById('archivePager');
+  const pagerInfo = document.getElementById('archivePagerInfo');
+  const prevBtn = document.getElementById('archivePrev');
+  const nextBtn = document.getElementById('archiveNext');
   const shareUser = document.getElementById('archiveShareUser');
   const shareBtn = document.getElementById('archiveShareBtn');
+  const usersDatalist = document.getElementById('archiveUsersDatalist');
+  const userSearch = document.getElementById('archiveUserSearch');
+  const usersListEl = document.getElementById('archiveUsersList');
   const exportTxtBtn = document.getElementById('archiveExportTxt');
   const exportPdfBtn = document.getElementById('archiveExportPdf');
 
   if (!openBtn || !modal) return;
 
   let items = [];
+  let users = [];
+  const selected = new Set();
+  let page = 0;
+  let pageSize = Number(pageSizeSel.value) || 10;
+  let currentTag = '';
 
   const optionsToText = (opts) => (Array.isArray(opts) ? opts.join('\n') : '');
   const textToOptions = (txt) =>
@@ -67,16 +82,64 @@ export function initArchive() {
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean);
+  const textToTags = (txt) =>
+    txt
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-  const selectedIds = () =>
-    [...listEl.querySelectorAll('.archive-pick')]
-      .filter((cb) => cb.checked)
-      .map((cb) => Number(cb.dataset.id));
+  const view = () =>
+    currentTag
+      ? items.filter((q) => Array.isArray(q.tags) && q.tags.includes(currentTag))
+      : items;
+
+  const pageCount = () => Math.max(1, Math.ceil(view().length / pageSize));
+
+  const refreshTagFilter = () => {
+    const tags = [...new Set(items.flatMap((q) => q.tags || []))].sort((a, b) =>
+      a.localeCompare(b, 'uk'),
+    );
+    if (currentTag && !tags.includes(currentTag)) currentTag = '';
+    tagFilter.innerHTML = '';
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'усі';
+    tagFilter.appendChild(all);
+    tags.forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      tagFilter.appendChild(opt);
+    });
+    tagFilter.value = currentTag;
+  };
+
+  const updateSelCount = () => {
+    selCount.textContent = `обрано: ${selected.size}`;
+    const pageIds = view()
+      .slice(page * pageSize, page * pageSize + pageSize)
+      .map((q) => q.id);
+    selectAll.checked = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  };
+
+  const renderPager = () => {
+    const total = pageCount();
+    pager.hidden = view().length <= pageSize;
+    pagerInfo.textContent = `${page + 1} / ${total}`;
+    prevBtn.disabled = page <= 0;
+    nextBtn.disabled = page >= total - 1;
+  };
 
   const render = () => {
+    if (page > pageCount() - 1) page = pageCount() - 1;
+    if (page < 0) page = 0;
     listEl.innerHTML = '';
-    emptyEl.hidden = items.length > 0;
-    items.forEach((q) => {
+    const vis = view();
+    emptyEl.hidden = vis.length > 0;
+    emptyEl.textContent =
+      items.length && !vis.length ? 'За цим тегом нічого немає.' : 'Архів порожній.';
+    const slice = vis.slice(page * pageSize, page * pageSize + pageSize);
+    slice.forEach((q) => {
       const node = tpl.content.firstElementChild.cloneNode(true);
       const pick = node.querySelector('.archive-pick');
       const thumb = node.querySelector('.archive-thumb');
@@ -86,16 +149,25 @@ export function initArchive() {
       const question = node.querySelector('.archive-question');
       const optionsEl = node.querySelector('.archive-options');
       const correct = node.querySelector('.archive-correct');
+      const tagsEl = node.querySelector('.archive-tags');
       const saveBtn = node.querySelector('.archive-save');
       const savedMsg = node.querySelector('.archive-saved');
 
       pick.dataset.id = q.id;
+      pick.checked = selected.has(q.id);
+      pick.addEventListener('change', () => {
+        if (pick.checked) selected.add(q.id);
+        else selected.delete(q.id);
+        updateSelCount();
+      });
+
       img.src = imgUrl(q.id);
       thumb.href = imgUrl(q.id);
       date.textContent = fmtDate(q.createdAt);
       question.value = q.question || '';
       optionsEl.value = optionsToText(q.options);
       correct.value = q.correctAnswer || '';
+      tagsEl.value = Array.isArray(q.tags) ? q.tags.join(', ') : '';
 
       const markDirty = () => {
         savedMsg.hidden = true;
@@ -103,6 +175,7 @@ export function initArchive() {
       question.addEventListener('input', markDirty);
       optionsEl.addEventListener('input', markDirty);
       correct.addEventListener('input', markDirty);
+      tagsEl.addEventListener('input', markDirty);
 
       saveBtn.addEventListener('click', async () => {
         errEl.textContent = '';
@@ -114,10 +187,12 @@ export function initArchive() {
               question: question.value,
               options: textToOptions(optionsEl.value),
               correctAnswer: correct.value,
+              tags: textToTags(tagsEl.value),
             }),
           });
           Object.assign(q, updated);
           savedMsg.hidden = false;
+          refreshTagFilter();
         } catch (e) {
           errEl.textContent = e.message;
         } finally {
@@ -130,6 +205,8 @@ export function initArchive() {
         try {
           await api(`/me/questions/${q.id}`, { method: 'DELETE' });
           items = items.filter((x) => x.id !== q.id);
+          selected.delete(q.id);
+          refreshTagFilter();
           render();
         } catch (e) {
           errEl.textContent = e.message;
@@ -138,7 +215,52 @@ export function initArchive() {
 
       listEl.appendChild(node);
     });
-    selectAll.checked = false;
+    renderPager();
+    updateSelCount();
+  };
+
+  const renderUsers = (filter = '') => {
+    const f = filter.trim().toLowerCase();
+    const matched = f
+      ? users.filter((u) => u.name.toLowerCase().includes(f))
+      : users;
+    usersListEl.innerHTML = '';
+    if (!matched.length) {
+      const empty = document.createElement('div');
+      empty.className = 'archive-users__empty';
+      empty.textContent = users.length ? 'Нічого не знайдено' : 'Немає користувачів';
+      usersListEl.appendChild(empty);
+      return;
+    }
+    matched.forEach((u) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'archive-users__item';
+      btn.textContent = u.name;
+      if (shareUser.value.trim() === u.name) btn.classList.add('is-active');
+      btn.addEventListener('click', () => {
+        shareUser.value = u.name;
+        usersListEl
+          .querySelectorAll('.archive-users__item')
+          .forEach((el) => el.classList.toggle('is-active', el === btn));
+      });
+      usersListEl.appendChild(btn);
+    });
+  };
+
+  const loadUsers = async () => {
+    try {
+      users = await api('/me/share-targets');
+    } catch {
+      users = [];
+    }
+    usersDatalist.innerHTML = '';
+    users.forEach((u) => {
+      const opt = document.createElement('option');
+      opt.value = u.name;
+      usersDatalist.appendChild(opt);
+    });
+    renderUsers(userSearch.value);
   };
 
   const load = async () => {
@@ -149,28 +271,64 @@ export function initArchive() {
       items = [];
       errEl.textContent = e.message;
     }
+    selected.clear();
+    page = 0;
+    refreshTagFilter();
     render();
   };
 
   openBtn.addEventListener('click', async () => {
     modal.hidden = false;
-    await load();
+    await Promise.all([load(), loadUsers()]);
   });
 
   closeBtn.addEventListener('click', () => {
     modal.hidden = true;
   });
 
+  pageSizeSel.addEventListener('change', () => {
+    pageSize = Number(pageSizeSel.value) || 10;
+    page = 0;
+    render();
+  });
+
+  tagFilter.addEventListener('change', () => {
+    currentTag = tagFilter.value;
+    page = 0;
+    render();
+  });
+
+  prevBtn.addEventListener('click', () => {
+    if (page > 0) {
+      page--;
+      render();
+    }
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (page < pageCount() - 1) {
+      page++;
+      render();
+    }
+  });
+
   selectAll.addEventListener('change', () => {
+    const pageIds = view()
+      .slice(page * pageSize, page * pageSize + pageSize)
+      .map((q) => q.id);
+    pageIds.forEach((id) => {
+      if (selectAll.checked) selected.add(id);
+      else selected.delete(id);
+    });
     listEl.querySelectorAll('.archive-pick').forEach((cb) => {
       cb.checked = selectAll.checked;
     });
+    updateSelCount();
   });
 
-  const pickedItems = () => {
-    const ids = new Set(selectedIds());
-    return items.filter((q) => ids.has(q.id));
-  };
+  userSearch.addEventListener('input', () => renderUsers(userSearch.value));
+
+  const pickedItems = () => items.filter((q) => selected.has(q.id));
 
   exportTxtBtn.addEventListener('click', () => {
     const picked = pickedItems();
@@ -240,14 +398,16 @@ export function initArchive() {
         if (dataUrl) {
           try {
             const props = doc.getImageProperties(dataUrl);
-            const imgW = Math.min(maxW, props.width);
-            const imgH = (props.height * imgW) / props.width;
-            const drawH = Math.min(imgH, pageH - margin * 2);
-            const drawW = (props.width * drawH) / props.height > maxW
-              ? maxW
-              : (props.width * drawH) / props.height;
+            const drawW = Math.min(maxW, props.width);
+            let drawH = (props.height * drawW) / props.width;
+            const cap = pageH - margin * 2;
+            let finalW = drawW;
+            if (drawH > cap) {
+              drawH = cap;
+              finalW = (props.width * drawH) / props.height;
+            }
             ensure(drawH + 8);
-            doc.addImage(dataUrl, 'JPEG', margin, y, drawW, drawH);
+            doc.addImage(dataUrl, 'JPEG', margin, y, finalW, drawH);
             y += drawH + 10;
           } catch {}
         }
@@ -269,7 +429,7 @@ export function initArchive() {
   });
 
   shareBtn.addEventListener('click', async () => {
-    const ids = selectedIds();
+    const ids = [...selected];
     const toUser = shareUser.value.trim();
     if (!toUser) {
       errEl.textContent = 'Вкажіть імʼя користувача.';
@@ -288,6 +448,7 @@ export function initArchive() {
       });
       errEl.textContent = `Поширено: ${shared}`;
       shareUser.value = '';
+      renderUsers(userSearch.value);
     } catch (e) {
       errEl.textContent = e.message;
     } finally {

@@ -70,3 +70,10 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_user_questions_user ON user_questions(user_id);
 `);
+
+const questionCols = db
+  .prepare('PRAGMA table_info(user_questions)')
+  .all() as Array<{ name: string }>;
+if (!questionCols.some((c) => c.name === 'tags')) {
+  db.exec("ALTER TABLE user_questions ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+}

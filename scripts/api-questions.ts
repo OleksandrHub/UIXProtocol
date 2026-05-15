@@ -5,6 +5,7 @@ import {
   getQuestionImage,
   getUserByName,
   listQuestions,
+  listUsers,
   shareQuestions,
   updateQuestion,
 } from './db';
@@ -20,6 +21,16 @@ export async function handleQuestions(
     const me = requireAuth(req, res);
     if (!me) return true;
     sendJson(res, 200, listQuestions(me.id));
+    return true;
+  }
+
+  if (path === '/api/me/share-targets' && method === 'GET') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    const others = listUsers()
+      .filter((u) => u.id !== me.id)
+      .map((u) => ({ id: u.id, name: u.name }));
+    sendJson(res, 200, others);
     return true;
   }
 
@@ -72,11 +83,20 @@ export async function handleQuestions(
       question?: string;
       options?: string[];
       correctAnswer?: string;
+      tags?: string[];
     }>(req);
-    const patch: { question?: string; options?: string[]; correctAnswer?: string } = {};
+    const patch: {
+      question?: string;
+      options?: string[];
+      correctAnswer?: string;
+      tags?: string[];
+    } = {};
     if (typeof body.question === 'string') patch.question = body.question;
     if (Array.isArray(body.options)) patch.options = body.options.map((o) => String(o));
     if (typeof body.correctAnswer === 'string') patch.correctAnswer = body.correctAnswer;
+    if (Array.isArray(body.tags)) {
+      patch.tags = body.tags.map((t) => String(t).trim()).filter(Boolean);
+    }
     const updated = updateQuestion(me.id, id, patch);
     if (!updated) {
       sendJson(res, 404, { error: 'not found' });
