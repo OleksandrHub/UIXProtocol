@@ -13,8 +13,8 @@ export const APPEARANCE_DEFAULTS = {
   btnColorOpacity: 25,
   btnBg: '#ffffff',
   btnBgOpacity: 0,
-  showFilesStatus: true,
-  showModelToast: true,
+  showFilesStatus: false,
+  showModelToast: false,
 };
 
 let cache = { ...APPEARANCE_DEFAULTS };
