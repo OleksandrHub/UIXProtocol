@@ -58,7 +58,7 @@ export function getQuestionImage(userId: number, id: number): QuestionImage | nu
   const row = db
     .prepare('SELECT image, mime FROM user_questions WHERE id = ? AND user_id = ?')
     .get(id, userId) as { image: Buffer; mime: string } | undefined;
-  if (!row) return null;
+  if (!row || !row.image || row.image.length === 0) return null;
   return { data: row.image, mime: row.mime };
 }
 

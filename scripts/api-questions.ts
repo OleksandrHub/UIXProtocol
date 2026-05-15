@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  addQuestion,
   deleteQuestion,
   getQuestionImage,
   getUserByName,
@@ -21,6 +22,30 @@ export async function handleQuestions(
     const me = requireAuth(req, res);
     if (!me) return true;
     sendJson(res, 200, listQuestions(me.id));
+    return true;
+  }
+
+  if (path === '/api/me/questions' && method === 'POST') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    const body = await readJson<{
+      question?: string;
+      options?: string[];
+      correctAnswer?: string;
+      tags?: string[];
+    }>(req);
+    const q = addQuestion(
+      me.id,
+      Buffer.alloc(0),
+      'image/jpeg',
+      typeof body.question === 'string' ? body.question : '',
+      Array.isArray(body.options) ? body.options.map((o) => String(o)) : [],
+      typeof body.correctAnswer === 'string' ? body.correctAnswer : '',
+      Array.isArray(body.tags)
+        ? body.tags.map((t) => String(t).trim()).filter(Boolean)
+        : [],
+    );
+    sendJson(res, 201, q);
     return true;
   }
 

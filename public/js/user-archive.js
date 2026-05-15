@@ -66,6 +66,7 @@ export function initArchive() {
   const usersListEl = document.getElementById('archiveUsersList');
   const exportTxtBtn = document.getElementById('archiveExportTxt');
   const exportPdfBtn = document.getElementById('archiveExportPdf');
+  const addBtn = document.getElementById('archiveAddBtn');
 
   if (!openBtn || !modal) return;
 
@@ -163,6 +164,11 @@ export function initArchive() {
 
       img.src = imgUrl(q.id);
       thumb.href = imgUrl(q.id);
+      img.addEventListener('error', () => {
+        thumb.removeAttribute('href');
+        thumb.classList.add('archive-thumb--empty');
+        thumb.textContent = 'без зображення';
+      });
       date.textContent = fmtDate(q.createdAt);
       question.value = q.question || '';
       optionsEl.value = optionsToText(q.options);
@@ -296,6 +302,29 @@ export function initArchive() {
     currentTag = tagFilter.value;
     page = 0;
     render();
+  });
+
+  addBtn.addEventListener('click', async () => {
+    errEl.textContent = '';
+    addBtn.disabled = true;
+    try {
+      const created = await api('/me/questions', {
+        method: 'POST',
+        body: JSON.stringify({ question: '', options: [], correctAnswer: '', tags: [] }),
+      });
+      items.unshift(created);
+      currentTag = '';
+      tagFilter.value = '';
+      page = 0;
+      refreshTagFilter();
+      render();
+      const first = listEl.querySelector('.archive-item .archive-question');
+      if (first) first.focus();
+    } catch (e) {
+      errEl.textContent = e.message;
+    } finally {
+      addBtn.disabled = false;
+    }
   });
 
   prevBtn.addEventListener('click', () => {

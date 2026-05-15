@@ -239,6 +239,17 @@
   display: block;
 }
 
+.archive-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: .72rem;
+  color: #9a9aa2;
+  background: #f3f3f7;
+  cursor: default;
+}
+
 .archive-date {
   font-size: .72rem;
   color: #8d8d96;

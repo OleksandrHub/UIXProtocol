@@ -144,14 +144,20 @@ export async function handleFiles(
         files,
       });
       try {
-        addQuestion(
-          me.id,
-          Buffer.from(body.imageBase64, 'base64'),
-          'image/jpeg',
-          result.question,
-          result.options,
-          result.correct || result.answer,
-        );
+        const img = Buffer.from(body.imageBase64, 'base64');
+        const parsed = result.questions.length
+          ? result.questions
+          : [{ question: '', options: [] as string[], correct: result.answer }];
+        for (const q of parsed) {
+          addQuestion(
+            me.id,
+            img,
+            'image/jpeg',
+            q.question,
+            q.options,
+            q.correct || result.answer,
+          );
+        }
       } catch (e) {
         console.error('[Questions] failed to archive:', (e as Error).message);
       }
