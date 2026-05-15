@@ -5,8 +5,8 @@ import {
   makeClient,
   uploadFileForKey,
 } from './gemini-cache';
-import { parseResultText } from './gemini-parser';
-import type { PreloadResult, SolveOptions, UserFile } from './types';
+import { parseResultText, parseStructured, STRUCTURED_SUFFIX } from './gemini-parser';
+import type { PreloadResult, SolveOptions, SolveResult, UserFile } from './types';
 
 export { getCachedFileIds, invalidateUploadsForUser } from './gemini-cache';
 
@@ -47,16 +47,27 @@ async function callOnce(
   return text;
 }
 
-export async function solveWithGemini(options: SolveOptions): Promise<string> {
+export async function solveWithGemini(options: SolveOptions): Promise<SolveResult> {
   if (!options.models.length) throw new Error('no models enabled');
+
+  const augmented: SolveOptions = {
+    ...options,
+    prompt: options.prompt + STRUCTURED_SUFFIX,
+  };
 
   let lastError: unknown;
 
   for (const model of options.models) {
     for (const apiKey of options.apiKeys) {
       try {
-        const text = await callOnce(apiKey, model, options);
-        return parseResultText(text);
+        const text = await callOnce(apiKey, model, augmented);
+        const structured = parseStructured(text);
+        return {
+          answer: parseResultText(text),
+          question: structured.question,
+          options: structured.options,
+          correct: structured.correct,
+        };
       } catch (e) {
         lastError = e;
         console.error(
