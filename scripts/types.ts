@@ -110,11 +110,15 @@ export interface SolveOptions {
   files: UserFile[];
 }
 
-export interface SolveResult {
-  answer: string;
+export interface ParsedQuestion {
   question: string;
   options: string[];
   correct: string;
+}
+
+export interface SolveResult {
+  answer: string;
+  questions: ParsedQuestion[];
 }
 
 export interface PreloadResult {

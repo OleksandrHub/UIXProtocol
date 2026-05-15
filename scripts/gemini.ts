@@ -61,12 +61,9 @@ export async function solveWithGemini(options: SolveOptions): Promise<SolveResul
     for (const apiKey of options.apiKeys) {
       try {
         const text = await callOnce(apiKey, model, augmented);
-        const structured = parseStructured(text);
         return {
           answer: parseResultText(text),
-          question: structured.question,
-          options: structured.options,
-          correct: structured.correct,
+          questions: parseStructured(text),
         };
       } catch (e) {
         lastError = e;

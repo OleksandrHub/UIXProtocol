@@ -1,13 +1,15 @@
+import type { ParsedQuestion } from './types';
+
 // A server-controlled instruction appended after the (user-customizable)
 // prompt. It asks the model for an extra machine-readable block so we can
-// archive the question/options/correct answer without changing the short
+// archive every question/options/correct answer without changing the short
 // answer the overlay shows.
 export const STRUCTURED_SUFFIX = `
 
 ---
-ALSO, on a separate final line, output exactly one machine-readable block:
-[[QDATA]]{"question":"<full question text>","options":["<choice 1>","<choice 2>"],"correct":"<the correct answer text or label>"}[[/QDATA]]
-Rules: valid minified JSON, no markdown, escape inner quotes, "options" is [] if there are no listed choices, always include the block even if unsure.`;
+ALSO, on a separate final line, output exactly one machine-readable block listing EVERY question visible on the screen as a JSON array:
+[[QDATA]][{"question":"<full question text>","options":["<choice 1>","<choice 2>"],"correct":"<the correct answer text or label>"}][[/QDATA]]
+Rules: valid minified JSON ARRAY, one object per question in screen order, no markdown, escape inner quotes, "options" is [] if there are no listed choices, include ALL questions if there are several, always output the block even if unsure.`;
 
 const QDATA_RE = /\[\[QDATA\]\]\s*([\s\S]*?)\s*\[\[\/QDATA\]\]/i;
 
@@ -15,28 +17,27 @@ function stripStructured(text: string): string {
   return text.replace(QDATA_RE, '').trim();
 }
 
-export interface StructuredResult {
-  question: string;
-  options: string[];
-  correct: string;
+function coerce(raw: unknown): ParsedQuestion | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const question = typeof o.question === 'string' ? o.question : '';
+  const correct = typeof o.correct === 'string' ? o.correct : '';
+  const options = Array.isArray(o.options) ? o.options.map((x) => String(x)) : [];
+  if (!question && !correct && !options.length) return null;
+  return { question, options, correct };
 }
 
-export function parseStructured(text: string): StructuredResult {
-  const empty: StructuredResult = { question: '', options: [], correct: '' };
+export function parseStructured(text: string): ParsedQuestion[] {
   const m = text.match(QDATA_RE);
-  if (!m?.[1]) return empty;
+  if (!m?.[1]) return [];
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(m[1].trim()) as Partial<StructuredResult>;
-    return {
-      question: typeof parsed.question === 'string' ? parsed.question : '',
-      options: Array.isArray(parsed.options)
-        ? parsed.options.map((o) => String(o))
-        : [],
-      correct: typeof parsed.correct === 'string' ? parsed.correct : '',
-    };
+    parsed = JSON.parse(m[1].trim());
   } catch {
-    return empty;
+    return [];
   }
+  const list = Array.isArray(parsed) ? parsed : [parsed];
+  return list.map(coerce).filter((q): q is ParsedQuestion => q !== null);
 }
 
 export function parseResultText(raw: string): string {
