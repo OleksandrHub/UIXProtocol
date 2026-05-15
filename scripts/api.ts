@@ -4,6 +4,7 @@ import { sendJson, sendNoContent } from './api-helpers';
 import { handleAuth } from './api-auth';
 import { handleMe } from './api-me';
 import { handleFiles } from './api-files';
+import { handleQuestions } from './api-questions';
 import { handleAdminUsers } from './api-admin-users';
 
 export async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
@@ -22,6 +23,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     if (await handleAuth(req, res, path, method)) return true;
     if (await handleMe(req, res, path, method)) return true;
     if (await handleFiles(req, res, path, method)) return true;
+    if (await handleQuestions(req, res, path, method)) return true;
     if (await handleAdminUsers(req, res, path, method)) return true;
 
     sendJson(res, 404, { error: 'not found' });

@@ -60,6 +60,30 @@ export interface UserPrompt {
   text: string;
 }
 
+export interface QuestionMeta {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  createdAt: number;
+}
+
+export interface QuestionRow {
+  id: number;
+  user_id: number;
+  image: Buffer;
+  mime: string;
+  question: string;
+  options: string;
+  correct_answer: string;
+  created_at: number;
+}
+
+export interface QuestionImage {
+  data: Buffer;
+  mime: string;
+}
+
 export interface UserRow {
   id: number;
   name: string;
@@ -82,6 +106,13 @@ export interface SolveOptions {
   prompt: string;
   models: string[];
   files: UserFile[];
+}
+
+export interface SolveResult {
+  answer: string;
+  question: string;
+  options: string[];
+  correct: string;
 }
 
 export interface PreloadResult {

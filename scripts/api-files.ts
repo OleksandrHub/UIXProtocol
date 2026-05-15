@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  addQuestion,
   addUserFile,
   deleteUserFile,
   getUserFiles,
@@ -135,14 +136,26 @@ export async function handleFiles(
     const files = getUserFiles(me.id);
 
     try {
-      const answer = await solveWithGemini({
+      const result = await solveWithGemini({
         apiKeys: keys,
         imageBase64: body.imageBase64,
         prompt: promptText,
         models,
         files,
       });
-      sendJson(res, 200, { answer });
+      try {
+        addQuestion(
+          me.id,
+          Buffer.from(body.imageBase64, 'base64'),
+          'image/jpeg',
+          result.question,
+          result.options,
+          result.correct || result.answer,
+        );
+      } catch (e) {
+        console.error('[Questions] failed to archive:', (e as Error).message);
+      }
+      sendJson(res, 200, { answer: result.answer });
     } catch (e) {
       sendJson(res, 502, { error: (e as Error).message });
     }

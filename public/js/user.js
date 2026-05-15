@@ -8,6 +8,7 @@ import {
 import { initGemini } from './user-gemini.js';
 import { initFilesStatus } from './user-files-status.js';
 import { initSettings } from './user-settings.js';
+import { initArchive } from './user-archive.js';
 
 const id = Number(location.pathname.split('/').filter(Boolean)[0]);
 if (!Number.isFinite(id)) location.href = '/';
@@ -130,6 +131,8 @@ async function enterAuthed(me, { fromLogin }) {
     onFilesChanged: () => filesStatus.refresh(),
     onAppearanceChanged: () => filesStatus.applyPrefs(),
   });
+
+  initArchive();
 }
 
 function installFavicon(me) {
