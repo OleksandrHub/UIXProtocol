@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
 
@@ -9,9 +10,41 @@ import { PREVIEW_RE, PUBLIC_DIR } from '../shared/constants';
 import { safeJsPath, serveFile } from '../server/static';
 import { proxyForUser, proxyHandle } from '../server/proxy';
 
+const LOADERIO_TOKEN = 'loaderio-213257cff0bbdbf549a9fff9d55a3d2b';
+const LOADERIO_FILE = path.join(process.cwd(), `${LOADERIO_TOKEN}.txt`);
+
+function serveLoaderioVerification(reqPath: string, res: http.ServerResponse): boolean {
+  if (
+    reqPath !== `/${LOADERIO_TOKEN}.txt` &&
+    reqPath !== `/${LOADERIO_TOKEN}.html` &&
+    reqPath !== `/${LOADERIO_TOKEN}/`
+  ) {
+    return false;
+  }
+
+  fs.readFile(LOADERIO_FILE, 'utf-8', (err, text) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': Buffer.byteLength(text),
+      'Cache-Control': 'no-store',
+    });
+    res.end(text);
+  });
+
+  return true;
+}
+
 http
   .createServer(async (req, res) => {
     const reqPath = (req.url ?? '/').split('?')[0] ?? '/';
+
+    if (serveLoaderioVerification(reqPath, res)) return;
 
     if (await handleApi(req, res)) return;
 
