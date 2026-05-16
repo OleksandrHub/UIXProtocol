@@ -58,10 +58,14 @@ export function initGemini() {
       1,
       doc.documentElement.scrollWidth || win.innerWidth || doc.documentElement.clientWidth || 1
     );
+    // Render at the device pixel ratio (capped at 2) so small text stays
+    // crisp — higher effective resolution is what Gemini's OCR benefits
+    // from most.
+    const renderScale = Math.min(2, Math.max(1, win.devicePixelRatio || 1));
     return h2c(root, {
       useCORS: true,
       allowTaint: true,
-      scale: 1,
+      scale: renderScale,
       x: 0,
       y: win.scrollY || 0,
       width: fullW,
@@ -75,14 +79,19 @@ export function initGemini() {
 
   const canvasToBase64Jpeg = (canvas) =>
     new Promise((resolve, reject) => {
-      const maxW = 1600;
+      // Keep plenty of pixels per glyph for OCR; only downscale very wide
+      // captures. High JPEG quality avoids compression artefacts on text.
+      const maxW = 2200;
       let target = canvas;
       if (canvas.width > maxW) {
-        const scale = maxW / canvas.width;
+        const ratio = maxW / canvas.width;
         target = document.createElement('canvas');
         target.width = maxW;
-        target.height = Math.round(canvas.height * scale);
-        target.getContext('2d').drawImage(canvas, 0, 0, target.width, target.height);
+        target.height = Math.round(canvas.height * ratio);
+        const ctx = target.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, target.width, target.height);
       }
       target.toBlob(
         (blob) => {
@@ -93,7 +102,7 @@ export function initGemini() {
           reader.readAsDataURL(blob);
         },
         'image/jpeg',
-        0.7
+        0.92
       );
     });
 

@@ -67,6 +67,8 @@ export function initArchive() {
   const exportTxtBtn = document.getElementById('archiveExportTxt');
   const exportPdfBtn = document.getElementById('archiveExportPdf');
   const addBtn = document.getElementById('archiveAddBtn');
+  const searchEl = document.getElementById('archiveSearch');
+  const deleteSelBtn = document.getElementById('archiveDeleteSel');
 
   if (!openBtn || !modal) return;
 
@@ -76,6 +78,7 @@ export function initArchive() {
   let page = 0;
   let pageSize = Number(pageSizeSel.value) || 10;
   let currentTag = '';
+  let currentSearch = '';
 
   const optionsToText = (opts) => (Array.isArray(opts) ? opts.join('\n') : '');
   const textToOptions = (txt) =>
@@ -89,10 +92,25 @@ export function initArchive() {
       .map((s) => s.trim())
       .filter(Boolean);
 
+  const matchesSearch = (q) => {
+    if (!currentSearch) return true;
+    const hay = [
+      q.question || '',
+      Array.isArray(q.options) ? q.options.join(' ') : '',
+      q.correctAnswer || '',
+      Array.isArray(q.tags) ? q.tags.join(' ') : '',
+    ]
+      .join(' ')
+      .toLowerCase();
+    return currentSearch.split(/\s+/).every((term) => hay.includes(term));
+  };
+
   const view = () =>
-    currentTag
-      ? items.filter((q) => Array.isArray(q.tags) && q.tags.includes(currentTag))
-      : items;
+    items.filter(
+      (q) =>
+        (!currentTag || (Array.isArray(q.tags) && q.tags.includes(currentTag))) &&
+        matchesSearch(q),
+    );
 
   const pageCount = () => Math.max(1, Math.ceil(view().length / pageSize));
 
@@ -138,7 +156,7 @@ export function initArchive() {
     const vis = view();
     emptyEl.hidden = vis.length > 0;
     emptyEl.textContent =
-      items.length && !vis.length ? 'За цим тегом нічого немає.' : 'Архів порожній.';
+      items.length && !vis.length ? 'Нічого не знайдено.' : 'Архів порожній.';
     const slice = vis.slice(page * pageSize, page * pageSize + pageSize);
     slice.forEach((q) => {
       const node = tpl.content.firstElementChild.cloneNode(true);
@@ -279,6 +297,8 @@ export function initArchive() {
     }
     selected.clear();
     page = 0;
+    currentSearch = '';
+    if (searchEl) searchEl.value = '';
     refreshTagFilter();
     render();
   };
@@ -302,6 +322,16 @@ export function initArchive() {
     currentTag = tagFilter.value;
     page = 0;
     render();
+  });
+
+  let searchTimer = null;
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      currentSearch = searchEl.value.trim().toLowerCase();
+      page = 0;
+      render();
+    }, 200);
   });
 
   addBtn.addEventListener('click', async () => {
@@ -358,6 +388,37 @@ export function initArchive() {
   userSearch.addEventListener('input', () => renderUsers(userSearch.value));
 
   const pickedItems = () => items.filter((q) => selected.has(q.id));
+
+  deleteSelBtn.addEventListener('click', async () => {
+    const ids = [...selected];
+    if (!ids.length) {
+      errEl.textContent = 'Нічого не обрано.';
+      return;
+    }
+    if (!window.confirm(`Видалити обрані питання (${ids.length})? Дію не скасувати.`)) {
+      return;
+    }
+    errEl.textContent = '';
+    deleteSelBtn.disabled = true;
+    let ok = 0;
+    const failed = [];
+    for (const id of ids) {
+      try {
+        await api(`/me/questions/${id}`, { method: 'DELETE' });
+        items = items.filter((x) => x.id !== id);
+        selected.delete(id);
+        ok++;
+      } catch {
+        failed.push(id);
+      }
+    }
+    refreshTagFilter();
+    render();
+    deleteSelBtn.disabled = false;
+    errEl.textContent = failed.length
+      ? `Видалено: ${ok}, не вдалося: ${failed.length}`
+      : `Видалено: ${ok}`;
+  });
 
   exportTxtBtn.addEventListener('click', () => {
     const picked = pickedItems();

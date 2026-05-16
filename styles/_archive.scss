@@ -105,6 +105,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+.archive-search {
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 280px;
+  padding: .35rem .55rem;
+  border: 1px solid #dcdce1;
+  border-radius: 6px;
+  font: inherit;
+  font-size: .82rem;
+  background: white;
+
+  &:focus {
+    outline: none;
+    border-color: #9aa0ff;
+  }
+}
+
 .archive-pagesize {
   flex-direction: row !important;
   align-items: center;
