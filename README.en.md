@@ -17,7 +17,7 @@ npm run start
 
 Open `http://localhost:3000/admin`, sign in as `admin`, create users. Each user then visits `http://localhost:3000/` (login form) or `http://localhost:3000/<their_id>/` directly.
 
-Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatically in the project root on first run.
+Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatically in the project root on first run. The `db-secret.key` encryption key (32 bytes, gitignored) is generated at the same time — **back it up**: without it the encrypted DB fields are unrecoverable. For production, supply the key via the `UIX_DB_KEY` env var (32 bytes hex or base64) instead of the file.
 
 ## Features
 
@@ -39,7 +39,18 @@ Requires Node.js 20+ and `npm`. The `users.db` SQLite file is created automatica
 
 ## Architecture
 
-Each large module is split into smaller files by concern. The public entry points (`server.ts`, `api.ts`, `db.ts`, `gemini.ts`) stay — they re-export or dispatch to the rest.
+Code under `scripts/` is split into folders by concern. Multi-file folders expose an `index.ts` barrel (`db/`, `gemini/`), so `from '../db'` imports work as a single entry point.
+
+```
+scripts/
+├── server/   server.ts (entry), proxy.ts, static.ts
+├── api/      router.ts, helpers.ts, auth.ts, me.ts, files.ts, questions.ts, admin-users.ts
+├── db/       index.ts, connection.ts, crypto.ts, cipher.ts, users.ts, files.ts, questions.ts, appearance.ts
+├── gemini/   index.ts, cache.ts, parser.ts
+├── auth/     session.ts
+├── shared/   constants.ts, types.ts
+└── tools/    create-admin.ts, build-html.ts, decrypt.ts
+```
 
 ### Server
 
@@ -47,49 +58,53 @@ Each large module is split into smaller files by concern. The public entry point
 
 | File | Purpose |
 | --- | --- |
-| [scripts/server.ts](scripts/server.ts) | Entry: `http.createServer` + route dispatcher |
-| [scripts/server-static.ts](scripts/server-static.ts) | `serveFile`, `safeJsPath` — local-file streaming |
-| [scripts/server-proxy.ts](scripts/server-proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — reverse proxy and preview mode |
+| [scripts/server/server.ts](scripts/server/server.ts) | Entry: `http.createServer` + route dispatcher |
+| [scripts/server/static.ts](scripts/server/static.ts) | `serveFile`, `safeJsPath` — local-file streaming |
+| [scripts/server/proxy.ts](scripts/server/proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — reverse proxy and preview mode |
 
 **REST API (`/api/*`):**
 
 | File | Purpose |
 | --- | --- |
-| [scripts/api.ts](scripts/api.ts) | Dispatcher: tries each handler group in order |
-| [scripts/api-helpers.ts](scripts/api-helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
-| [scripts/api-auth.ts](scripts/api-auth.ts) | login / logout / `/api/me` / `/api/config` / `/api/users/by-name` |
-| [scripts/api-me.ts](scripts/api-me.ts) | User settings: URL, keys, password, prompts, models |
-| [scripts/api-files.ts](scripts/api-files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
-| [scripts/api-admin-users.ts](scripts/api-admin-users.ts) | Admin CRUD over users |
+| [scripts/api/router.ts](scripts/api/router.ts) | Dispatcher: tries each handler group in order |
+| [scripts/api/helpers.ts](scripts/api/helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
+| [scripts/api/auth.ts](scripts/api/auth.ts) | login / logout / `/api/me` / `/api/config` / `/api/users/by-name` |
+| [scripts/api/me.ts](scripts/api/me.ts) | User settings: URL, keys, password, prompts, models |
+| [scripts/api/files.ts](scripts/api/files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
+| [scripts/api/questions.ts](scripts/api/questions.ts) | Question archive: list, add, edit, share |
+| [scripts/api/admin-users.ts](scripts/api/admin-users.ts) | Admin CRUD over users |
 
 **Database (`better-sqlite3`):**
 
 | File | Purpose |
 | --- | --- |
-| [scripts/db.ts](scripts/db.ts) | Re-export from `db-users`, `db-files`, `db-appearance` |
-| [scripts/db-connection.ts](scripts/db-connection.ts) | DB open, schema, runtime `ALTER TABLE` migrations |
-| [scripts/db-crypto.ts](scripts/db-crypto.ts) | scrypt password hashing + `safeParseArray` |
-| [scripts/db-users.ts](scripts/db-users.ts) | CRUD over `users` + `verify*` |
-| [scripts/db-files.ts](scripts/db-files.ts) | CRUD over `user_files`, IDs reused (same as `users`) |
-| [scripts/db-appearance.ts](scripts/db-appearance.ts) | `getAppearance`/`setAppearance` for `user_appearance` (one JSON blob per user) |
+| [scripts/db/index.ts](scripts/db/index.ts) | Barrel: re-export from `users`, `files`, `appearance`, `questions` |
+| [scripts/db/connection.ts](scripts/db/connection.ts) | DB open, schema, runtime `ALTER TABLE` migrations |
+| [scripts/db/crypto.ts](scripts/db/crypto.ts) | scrypt password hashing + `safeParseArray` |
+| [scripts/db/cipher.ts](scripts/db/cipher.ts) | Reversible field/BLOB encryption (AES-256-GCM): `encrypt`/`decrypt`, `encryptBuffer`/`decryptBuffer` |
+| [scripts/db/users.ts](scripts/db/users.ts) | CRUD over `users` + `verify*` |
+| [scripts/db/files.ts](scripts/db/files.ts) | CRUD over `user_files`, IDs reused (same as `users`) |
+| [scripts/db/questions.ts](scripts/db/questions.ts) | CRUD over `user_questions` + `shareQuestions` |
+| [scripts/db/appearance.ts](scripts/db/appearance.ts) | `getAppearance`/`setAppearance` for `user_appearance` (one JSON blob per user) |
 
 **Gemini (via `@google/genai`):**
 
 | File | Purpose |
 | --- | --- |
-| [scripts/gemini.ts](scripts/gemini.ts) | `solveWithGemini`, `preloadFiles`, `callOnce` — orchestration |
-| [scripts/gemini-cache.ts](scripts/gemini-cache.ts) | In-memory cache `<apiKey>::<fileId>` → uploaded URI |
-| [scripts/gemini-parser.ts](scripts/gemini-parser.ts) | `parseResultText` — short-answer extraction |
+| [scripts/gemini/index.ts](scripts/gemini/index.ts) | `solveWithGemini`, `preloadFiles`, `callOnce` — orchestration |
+| [scripts/gemini/cache.ts](scripts/gemini/cache.ts) | In-memory cache `<apiKey>::<fileId>` → uploaded URI |
+| [scripts/gemini/parser.ts](scripts/gemini/parser.ts) | `parseResultText` — short-answer extraction |
 
 **Other:**
 
 | File | Purpose |
 | --- | --- |
-| [scripts/session.ts](scripts/session.ts) | In-memory sessions, `uix_session` HttpOnly cookie |
-| [scripts/constants.ts](scripts/constants.ts) | Paths, MIME, timeouts, `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT` |
-| [scripts/types.ts](scripts/types.ts) | `User`, `UserFile`, `SolveOptions`, `ProxyOpts`, … |
-| [scripts/build-html.ts](scripts/build-html.ts) | Builds [pages/](pages) → [public/](public) (posthtml-include + expressions) |
-| [scripts/create-admin.ts](scripts/create-admin.ts) | CLI to create the first admin |
+| [scripts/auth/session.ts](scripts/auth/session.ts) | In-memory sessions, `uix_session` HttpOnly cookie |
+| [scripts/shared/constants.ts](scripts/shared/constants.ts) | Paths, MIME, timeouts, `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT`, `DB_KEY_PATH`/`DB_KEY_ENV` |
+| [scripts/shared/types.ts](scripts/shared/types.ts) | `User`, `UserFile`, `SolveOptions`, `ProxyOpts`, … |
+| [scripts/tools/build-html.ts](scripts/tools/build-html.ts) | Builds [pages/](pages) → [public/](public) (posthtml-include + expressions) |
+| [scripts/tools/create-admin.ts](scripts/tools/create-admin.ts) | CLI to create the first admin |
+| [scripts/tools/decrypt.ts](scripts/tools/decrypt.ts) | Manual decryption CLI (`npm run decrypt`) |
 | [environments/environment.ts](environments/environment.ts) | Config: port, default target, session TTL, iframe permissions |
 
 ### Client (no frameworks)
@@ -122,7 +137,7 @@ JS and HTML for each page are split by concern — the entry file imports submod
 
 HTML and CSS sources live outside `public/` and compile into it:
 
-- **HTML**: `pages/*.html` with includes (`<include src="partials/...">`) → `public/*.html` via [scripts/build-html.ts](scripts/build-html.ts) (`posthtml` + `posthtml-include` + `posthtml-expressions`).
+- **HTML**: `pages/*.html` with includes (`<include src="partials/...">`) → `public/*.html` via [scripts/tools/build-html.ts](scripts/tools/build-html.ts) (`posthtml` + `posthtml-include` + `posthtml-expressions`).
 - **CSS**: `styles/style.scss` (with `@use 'base'`, `'login'`, `'user'`, `'gemini'`, `'modal'`, `'admin'`, `'responsive'`) → `public/style.css` via `sass`.
 - **JS**: served as-is from `public/js/` — no bundler, plain ES modules.
 
@@ -141,54 +156,67 @@ HTML and CSS sources live outside `public/` and compile into it:
 
 ## Server modules — key functions
 
-### `server.ts` + `server-static.ts` + `server-proxy.ts`
+### `server/` — `server.ts` + `static.ts` + `proxy.ts`
 
-- `serveFile(res, file)` ([server-static.ts](scripts/server-static.ts)) — streams a local file with `Cache-Control: no-store`; MIME picked by extension.
-- `safeJsPath(reqPath)` ([server-static.ts](scripts/server-static.ts)) — normalises a `/js/*` path and blocks path traversal outside `public/js/`.
-- `rewriteUrls(text, targetHost)` ([server-proxy.ts](scripts/server-proxy.ts)) — strips `https://<targetHost>` and `http://<targetHost>` from response bodies so all absolute links stay within our origin.
-- `performProxy(req, res, targetRaw, pathOnly, opts)` ([server-proxy.ts](scripts/server-proxy.ts)) — performs the upstream http(s) request, rewrites `Set-Cookie` (drops `Domain`, `Secure`, forces `SameSite=Lax`), strips `X-Frame-Options` / `Content-Security-Policy` / `Strict-Transport-Security` / `Feature-Policy`, injects its own `Permissions-Policy` from `iframePermissions`. For `text/html` and `application/javascript` it buffers the body and runs `rewriteUrls`. Options (`ProxyOpts` from [types.ts](scripts/types.ts)):
+- `serveFile(res, file)` ([static.ts](scripts/server/static.ts)) — streams a local file with `Cache-Control: no-store`; MIME picked by extension.
+- `safeJsPath(reqPath)` ([static.ts](scripts/server/static.ts)) — normalises a `/js/*` path and blocks path traversal outside `public/js/`.
+- `rewriteUrls(text, targetHost)` ([proxy.ts](scripts/server/proxy.ts)) — strips `https://<targetHost>` and `http://<targetHost>` from response bodies so all absolute links stay within our origin.
+- `performProxy(req, res, targetRaw, pathOnly, opts)` ([proxy.ts](scripts/server/proxy.ts)) — performs the upstream http(s) request, rewrites `Set-Cookie` (drops `Domain`, `Secure`, forces `SameSite=Lax`), strips `X-Frame-Options` / `Content-Security-Policy` / `Strict-Transport-Security` / `Feature-Policy`, injects its own `Permissions-Policy` from `iframePermissions`. For `text/html` and `application/javascript` it buffers the body and runs `rewriteUrls`. Options (`ProxyOpts` from [types.ts](scripts/shared/types.ts)):
   - `sendCookies: false` — do not forward client cookies to the target
   - `stripSetCookie: true` — drop `Set-Cookie` from the upstream response (preview mode)
   - `setPreviewCookie: <userId>` — set `uix_preview=<userId>` cookie (HttpOnly, Lax)
-- `proxyForUser(req, res, userId, reqPath, preview)` ([server-proxy.ts](scripts/server-proxy.ts)) — picks the user's `target_url` (or `defaultTarget`) and calls `performProxy`.
-- `proxyHandle(req, res)` ([server-proxy.ts](scripts/server-proxy.ts)) — request-owner resolution order:
+- `proxyForUser(req, res, userId, reqPath, preview)` ([proxy.ts](scripts/server/proxy.ts)) — picks the user's `target_url` (or `defaultTarget`) and calls `performProxy`.
+- `proxyHandle(req, res)` ([proxy.ts](scripts/server/proxy.ts)) — request-owner resolution order:
   1. Session (`uix_session`) → proxy for the session user
   2. `Referer` starts with `/_p/<id>/` → preview for that `id`
   3. Cookie `uix_preview` → preview for that `id`
   4. Otherwise → `403`
 - `server.ts` itself is just `http.createServer` plus a flat chain of `if`s sieving `/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/`, and `/`. Anything else falls into `proxyHandle`.
 
-### `api.ts` (dispatcher) + `api-*.ts` (route groups)
+### `api/` — `router.ts` (dispatcher) + the other route groups
 
-`handleApi(req, res)` returns `true` if the request was handled as `/api/*`, otherwise `false` and control falls back to the `server.ts` router. The dispatcher itself is tiny: it tries `handleAuth` → `handleMe` → `handleFiles` → `handleAdminUsers` and the first one to return `true` wins. Otherwise — `404`.
+`handleApi(req, res)` returns `true` if the request was handled as `/api/*`, otherwise `false` and control falls back to the `server/server.ts` router. The dispatcher itself is tiny: it tries `handleAuth` → `handleMe` → `handleFiles` → `handleQuestions` → `handleAdminUsers` and the first one to return `true` wins. Otherwise — `404`.
 
-Bodies are read via `readJson<T>()` ([api-helpers.ts](scripts/api-helpers.ts)) with a 1 MB limit (30 MB for `POST /api/me/files`, 15 MB for `/api/gemini/solve` because of the base64 image). Errors serialise to `{ error: "..." }` via `sendJson(res, status, body)`.
+Bodies are read via `readJson<T>()` ([helpers.ts](scripts/api/helpers.ts)) with a 1 MB limit (30 MB for `POST /api/me/files`, 15 MB for `/api/gemini/solve` because of the base64 image). Errors serialise to `{ error: "..." }` via `sendJson(res, status, body)`.
 
-`requireAuth(req, res)` (shared by `api-me`/`api-files`) returns the `User` or `null`, having already replied `401`. [api-admin-users.ts](scripts/api-admin-users.ts) layers on `requireAdmin(req, res)`, which also checks `isAdmin`.
+`requireAuth(req, res)` (shared by `api-me`/`api-files`) returns the `User` or `null`, having already replied `401`. [admin-users.ts](scripts/api/admin-users.ts) layers on `requireAdmin(req, res)`, which also checks `isAdmin`.
 
-### `db.ts` + `db-connection.ts` + `db-crypto.ts` + `db-users.ts` + `db-files.ts`
+### `db/` — `index.ts` + `connection.ts` + `crypto.ts` + `cipher.ts` + `users.ts` + `files.ts` + `questions.ts`
 
-`db.ts` is a re-export of `db-users` + `db-files`, so `from './db'` imports keep working.
+`db/index.ts` is a re-export of `users`, `files`, `appearance`, `questions`, so `from '../db'` imports work as a single entry point.
 
-- `hashPassword(password)` / `verifyHash(password, stored)` ([db-crypto.ts](scripts/db-crypto.ts)) — scrypt (`node:crypto`), 16-byte salt, 64-byte key, format `scrypt$<salt-hex>$<hash-hex>`. Verification uses `crypto.timingSafeEqual`.
-- `firstChar(s)` ([db-crypto.ts](scripts/db-crypto.ts)) — `[...s][0]`, so it correctly handles Unicode codepoints (emoji, etc.).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` ([db-users.ts](scripts/db-users.ts)) — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`. On create, the smallest free `id` is chosen (`nextUserId()`) to reuse gaps after deletions.
-- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` ([db-files.ts](scripts/db-files.ts)) — CRUD for attached files (type is not restricted: PDF, images, text, audio, video). `addUserFile` runs in a transaction and picks the smallest free `id` via `nextFileId()` — same approach as users — so deleted file IDs are reused.
-- `verifyPasswordById` / `verifyPasswordByName` ([db-users.ts](scripts/db-users.ts)) — full password verification; on success calls `backfillFirstChar` if the column is empty.
-- `verifyFirstCharById` ([db-users.ts](scripts/db-users.ts)) — compares one character against `password_first` (no hashing). Only works once the column is populated.
-- The schema, `PRAGMA journal_mode = WAL`, and every `ALTER TABLE ADD COLUMN` migration live in [db-connection.ts](scripts/db-connection.ts) — importing it readies the DB.
-- `KNOWN_MODELS` and `DEFAULT_PROMPT_TEXT` live in [constants.ts](scripts/constants.ts) (they used to be in `db.ts`).
+- `hashPassword(password)` / `verifyHash(password, stored)` ([crypto.ts](scripts/db/crypto.ts)) — scrypt (`node:crypto`), 16-byte salt, 64-byte key, format `scrypt$<salt-hex>$<hash-hex>`. Verification uses `crypto.timingSafeEqual`. **One-way** — password only.
+- `encrypt(s)`/`decrypt(s)` and `encryptBuffer(b)`/`decryptBuffer(b)` ([cipher.ts](scripts/db/cipher.ts)) — **reversible** AES-256-GCM encryption for sensitive columns and BLOBs. The key comes from the `UIX_DB_KEY` env var (32 bytes hex/base64) or the `db-secret.key` file (auto-generated, `chmod 600`, gitignored). Text format is `enc:v1:<base64(iv|tag|ciphertext)>`, binary uses a `UIX\x01` magic header. Both are migration-safe: a value without the prefix/magic is returned **as-is** (legacy plaintext reads without error), and `encrypt*` is idempotent (won't re-wrap already-encrypted data).
+- `firstChar(s)` ([crypto.ts](scripts/db/crypto.ts)) — `[...s][0]`, so it correctly handles Unicode codepoints (emoji, etc.).
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` ([users.ts](scripts/db/users.ts)) — CRUD over `users`. `password_first` is written alongside `password_hash`. `updateUser` also accepts `prompts`, `activePromptId`, `enabledModels`, `activeModel`. On create, the smallest free `id` is chosen (`nextUserId()`) to reuse gaps after deletions.
+- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` ([files.ts](scripts/db/files.ts)) — CRUD for attached files (type is not restricted: PDF, images, text, audio, video). `addUserFile` runs in a transaction and picks the smallest free `id` via `nextFileId()` — same approach as users — so deleted file IDs are reused.
+- `verifyPasswordById` / `verifyPasswordByName` ([users.ts](scripts/db/users.ts)) — full password verification; on success calls `backfillFirstChar` if the column is empty.
+- `verifyFirstCharById` ([users.ts](scripts/db/users.ts)) — compares one character against `password_first` (no hashing). Only works once the column is populated.
+- The schema, `PRAGMA journal_mode = WAL`, and every `ALTER TABLE ADD COLUMN` migration live in [connection.ts](scripts/db/connection.ts) — importing it readies the DB.
+- `KNOWN_MODELS` and `DEFAULT_PROMPT_TEXT` live in [constants.ts](scripts/shared/constants.ts) (they used to be in `db/index.ts`).
 
-`users` schema:
+#### Sensitive-field encryption
+
+On top of the scrypt password hash, sensitive data is encrypted by `cipher.ts` (AES-256-GCM) before write and decrypted on read — transparently inside the `db/` functions. Encrypted columns (🔒 in the schemas below):
+
+| Table | Columns |
+| --- | --- |
+| `users` | `api_keys`, `target_url`, `password_first` |
+| `user_files` | `data` (BLOB) |
+| `user_questions` | `image` (BLOB), `question`, `correct_answer` |
+
+> **Existing-data migration is lazy and partial.** A legacy plaintext row reads fine but is only encrypted when the field is **rewritten** (password/URL/keys change, question edit). Columns with no rewrite path — existing `user_files.data` and `user_questions.image` — will **never** be encrypted by the lazy path. Protecting already-stored data requires a one-time pass over all rows.
+
+`users` schema (🔒 = encrypted via `cipher.ts`):
 
 ```sql
 id              INTEGER PRIMARY KEY AUTOINCREMENT
 name            TEXT UNIQUE NOT NULL
-password_hash   TEXT NOT NULL
-password_first  TEXT NOT NULL DEFAULT ''
-api_keys        TEXT NOT NULL DEFAULT '[]'   -- JSON array
+password_hash   TEXT NOT NULL                -- scrypt hash (one-way)
+password_first  TEXT NOT NULL DEFAULT ''     -- 🔒 (quick login; reversible)
+api_keys        TEXT NOT NULL DEFAULT '[]'   -- 🔒 JSON array
 is_admin        INTEGER NOT NULL DEFAULT 0
-target_url      TEXT NOT NULL DEFAULT ''
+target_url      TEXT NOT NULL DEFAULT ''     -- 🔒
 prompts         TEXT NOT NULL DEFAULT '[]'   -- JSON: [{id, name, text}, ...]
 active_prompt_id TEXT NOT NULL DEFAULT ''
 enabled_models  TEXT NOT NULL DEFAULT '[]'   -- JSON array of model names
@@ -202,9 +230,23 @@ id          INTEGER PRIMARY KEY AUTOINCREMENT
 user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
 name        TEXT NOT NULL
 mime        TEXT NOT NULL
-size        INTEGER NOT NULL
-data        BLOB NOT NULL
+size        INTEGER NOT NULL                 -- size of plaintext data
+data        BLOB NOT NULL                    -- 🔒 (AES-256-GCM, magic header)
 created_at  INTEGER NOT NULL
+```
+
+`user_questions` schema:
+
+```sql
+id             INTEGER PRIMARY KEY AUTOINCREMENT
+user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+image          BLOB NOT NULL                 -- 🔒
+mime           TEXT NOT NULL DEFAULT 'image/jpeg'
+question       TEXT NOT NULL DEFAULT ''      -- 🔒
+options        TEXT NOT NULL DEFAULT '[]'    -- JSON array
+correct_answer TEXT NOT NULL DEFAULT ''      -- 🔒
+tags           TEXT NOT NULL DEFAULT '[]'    -- JSON array
+created_at     INTEGER NOT NULL
 ```
 
 `user_appearance` schema (one row per user, JSON blob with `resultFont/Size/Color/...`, `btnFont/Size/...`, `showFilesStatus`, `showModelToast`):
@@ -225,16 +267,16 @@ All new columns are added via `ALTER TABLE ADD COLUMN` at runtime — old DBs ar
 - `clearSessionsForUser(userId)` — clears all active sessions for a user (called on delete).
 - A `setInterval(...).unref()` sweeps expired sessions every 60 s.
 
-### `gemini.ts` + `gemini-cache.ts` + `gemini-parser.ts`
+### `gemini/` — `index.ts` + `cache.ts` + `parser.ts`
 
 Uses the official `@google/genai` SDK instead of raw `fetch`. Call flow:
 
-- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` ([gemini.ts](scripts/gemini.ts)) — iterates models in user-defined order (the active model first), and for each model tries every API key. The first success returns; otherwise the last error is thrown. 20-second timeout per request, no auto-retries.
-- `uploadFileForKey(client, apiKey, file)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — lazily uploads a `UserFile` (BLOB from the DB) to the Gemini Files API via `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Returns `{ uri, mimeType, expiresAt }`. The result is cached in memory in `Map<"<apiKey>::<fileId>", UploadedFile>` for ~40 hours (the Files API itself keeps files for ~48h).
+- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` ([gemini.ts](scripts/gemini/index.ts)) — iterates models in user-defined order (the active model first), and for each model tries every API key. The first success returns; otherwise the last error is thrown. 20-second timeout per request, no auto-retries.
+- `uploadFileForKey(client, apiKey, file)` ([cache.ts](scripts/gemini/cache.ts)) — lazily uploads a `UserFile` (BLOB from the DB) to the Gemini Files API via `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Returns `{ uri, mimeType, expiresAt }`. The result is cached in memory in `Map<"<apiKey>::<fileId>", UploadedFile>` for ~40 hours (the Files API itself keeps files for ~48h).
 - The actual call: `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 } }, contents })`. `parts` start with the prompt text, then PDF parts via `createPartFromUri(uri, mime)`, ending with the screenshot `inlineData` (JPEG base64).
-- `invalidateUploadsForUser(fileIds)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — called from [api-files.ts](scripts/api-files.ts) when a user deletes a file, clearing the cache for that `fileId` across every key.
-- `dropCacheForKey(apiKey)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — drops every URI for one key; called by `solveWithGemini` after a failed attempt.
-- `parseResultText(text)` ([gemini-parser.ts](scripts/gemini-parser.ts)) — first looks for `Відповідь:` / `Answer:`, then for the first line matching `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
+- `invalidateUploadsForUser(fileIds)` ([cache.ts](scripts/gemini/cache.ts)) — called from [files.ts](scripts/api/files.ts) when a user deletes a file, clearing the cache for that `fileId` across every key.
+- `dropCacheForKey(apiKey)` ([cache.ts](scripts/gemini/cache.ts)) — drops every URI for one key; called by `solveWithGemini` after a failed attempt.
+- `parseResultText(text)` ([parser.ts](scripts/gemini/parser.ts)) — first looks for `Відповідь:` / `Answer:`, then for the first line matching `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
 
 If a request to one (model, key) pair fails, the URI cache for that key is reset automatically — the next attempt re-uploads the files.
 
@@ -353,7 +395,7 @@ Client side (`initGemini` in [public/js/user-gemini.js](public/js/user-gemini.js
 5. `POST /api/gemini/solve` with just `imageBase64`. The active prompt, active model, and file attachments are pulled from the user record on the server.
 6. The answer is rendered into `.gemini-result`.
 
-Server side ([api-files.ts](scripts/api-files.ts) → [gemini.ts](scripts/gemini.ts)):
+Server side ([files.ts](scripts/api/files.ts) → [gemini.ts](scripts/gemini/index.ts)):
 
 - Picks the user's active prompt (fallback — first in the list, then `DEFAULT_PROMPT_TEXT`).
 - Builds the model order: `activeModel` first, then the rest of `enabledModels`. If nothing is enabled — falls back to `gemini-2.5-flash`.
@@ -419,7 +461,7 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 | PUT    | `/api/me/appearance`   | Full JSON appearance object → written to `user_appearance.data`                       |
 | GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                 |
 | POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → file metadata (30 MB cap)                              |
-| DELETE | `/api/me/files/:id`    | `204`, also clears the URI cache in `gemini.ts`                                       |
+| DELETE | `/api/me/files/:id`    | `204`, also clears the URI cache in `gemini/cache.ts`                                       |
 | POST   | `/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Prompt / models / PDFs come from the DB     |
 
 ### Admin (`isAdmin=true`)
@@ -434,12 +476,13 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 
 ## Security
 
-- **Passwords**: scrypt (`node:crypto`), 16-byte salt, 64-byte key, verified via `timingSafeEqual`.
-- **Quick login** by the first character only works once `password_first` is stored (filled on create/password change, or backfilled on the first full login via `backfillFirstChar`). Note this is **not** equivalent to a full login (1 char → 26+ candidates), so enable it only where the trade-off is acceptable.
+- **Passwords**: scrypt (`node:crypto`), 16-byte salt, 64-byte key, verified via `timingSafeEqual`. One-way.
+- **Sensitive-field encryption**: AES-256-GCM ([cipher.ts](scripts/db/cipher.ts)) for `api_keys`, `target_url`, `password_first`, file BLOBs and questions (see the DB section). Key — `UIX_DB_KEY` or `db-secret.key`; **losing the key = losing this data**, keep a backup separate from the DB. Manual decryption — `npm run decrypt` (below).
+- **Quick login** by the first character only works once `password_first` is stored (stored encrypted; filled on create/password change, or backfilled on the first full login via `backfillFirstChar`). Note this is **not** equivalent to a full login (1 char → 26+ candidates), so enable it only where the trade-off is acceptable.
 - **Sessions** are in-memory `Map`; restarts invalidate every session. Cookie: `HttpOnly; SameSite=Lax; Path=/`.
 - **The proxy** strips `X-Frame-Options`, `Content-Security-Policy[-Report-Only]`, `Strict-Transport-Security`, `Feature-Policy` from upstream responses and injects its own `Permissions-Policy`.
 - **Target cookies** with `Domain=...`, `Secure`, `SameSite=*` are normalised (forced `SameSite=Lax`, no `Domain`/`Secure`). The session cookie name (`uix_session`) is never forwarded upstream.
-- **Path traversal** for static is blocked by `target.startsWith(root)` in `safeJsPath` ([server-static.ts](scripts/server-static.ts)).
+- **Path traversal** for static is blocked by `target.startsWith(root)` in `safeJsPath` ([static.ts](scripts/server/static.ts)).
 
 ## Running
 
@@ -457,7 +500,15 @@ npm run dev
 # Production — compile + plain node (minimal RAM)
 npm run build
 npm start
+
+# Manually decrypt DB fields (same key as the server)
+npm run decrypt -- "enc:v1:..."          # text token → plaintext
+npm run decrypt -- --b64 "<base64>"       # encrypted BLOB
+npm run decrypt -- --user 1               # dump a user's fields decrypted
+npm run decrypt -- --questions 1          # dump a user's questions decrypted
 ```
+
+> Production: set `UIX_DB_KEY` (32 bytes hex/base64) in the environment. Without it the key is read from `db-secret.key` in the project root (auto-created on first run, gitignored) — keep a backup of it.
 
 ## Dependencies
 

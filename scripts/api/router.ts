@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { sendJson, sendNoContent } from './api-helpers';
-import { handleAuth } from './api-auth';
-import { handleMe } from './api-me';
-import { handleFiles } from './api-files';
-import { handleQuestions } from './api-questions';
-import { handleAdminUsers } from './api-admin-users';
+import { sendJson, sendNoContent } from '../api/helpers';
+import { handleAuth } from '../api/auth';
+import { handleMe } from '../api/me';
+import { handleFiles } from '../api/files';
+import { handleQuestions } from '../api/questions';
+import { handleAdminUsers } from '../api/admin-users';
 
 export async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = req.url ?? '';

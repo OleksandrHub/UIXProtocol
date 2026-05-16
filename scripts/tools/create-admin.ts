@@ -1,5 +1,5 @@
 import * as readline from 'node:readline';
-import { createUser } from './db';
+import { createUser } from '../db';
 
 async function readStdin(): Promise<string[]> {
   const rl = readline.createInterface({ input: process.stdin, terminal: false });

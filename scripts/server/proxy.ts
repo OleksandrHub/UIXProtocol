@@ -2,15 +2,15 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 
-import { getUserById } from './db';
-import { environment } from '../environments/environment';
+import { getUserById } from '../db';
+import { environment } from '../../environments/environment';
 import {
   PREVIEW_COOKIE,
   PROXY_PREFIX,
   SESSION_COOKIE_NAME,
-} from './constants';
-import { getSessionUserId, parseCookie } from './session';
-import type { ProxyOpts } from './types';
+} from '../shared/constants';
+import { getSessionUserId, parseCookie } from '../auth/session';
+import type { ProxyOpts } from '../shared/types';
 
 function rewriteUrls(text: string, targetHost: string): string {
   return text

@@ -6,15 +6,15 @@ import {
   deleteUserFile,
   getUserFiles,
   listUserFiles,
-} from './db';
-import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from './constants';
+} from '../db';
+import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from '../shared/constants';
 import {
   getCachedFileIds,
   invalidateUploadsForUser,
   preloadFiles,
   solveWithGemini,
-} from './gemini';
-import { readJson, requireAuth, sendJson, sendNoContent } from './api-helpers';
+} from '../gemini';
+import { readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
 
 export async function handleFiles(
   req: IncomingMessage,

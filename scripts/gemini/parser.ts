@@ -1,4 +1,4 @@
-import type { ParsedQuestion } from './types';
+import type { ParsedQuestion } from '../shared/types';
 
 // A server-controlled instruction appended after the (user-customizable)
 // prompt. It asks the model for an extra machine-readable block so we can

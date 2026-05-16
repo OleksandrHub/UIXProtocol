@@ -4,11 +4,11 @@ import {
   dropCacheForKey,
   makeClient,
   uploadFileForKey,
-} from './gemini-cache';
-import { parseResultText, parseStructured, STRUCTURED_SUFFIX } from './gemini-parser';
-import type { PreloadResult, SolveOptions, SolveResult, UserFile } from './types';
+} from '../gemini/cache';
+import { parseResultText, parseStructured, STRUCTURED_SUFFIX } from '../gemini/parser';
+import type { PreloadResult, SolveOptions, SolveResult, UserFile } from '../shared/types';
 
-export { getCachedFileIds, invalidateUploadsForUser } from './gemini-cache';
+export { getCachedFileIds, invalidateUploadsForUser } from '../gemini/cache';
 
 async function callOnce(
   apiKey: string,

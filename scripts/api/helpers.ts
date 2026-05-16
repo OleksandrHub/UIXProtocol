@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { getUserById } from './db';
-import { getSessionUserId } from './session';
-import type { User } from './types';
+import { getUserById } from '../db';
+import { getSessionUserId } from '../auth/session';
+import type { User } from '../shared/types';
 
 export function readJson<T>(req: IncomingMessage, maxBytes = 1_000_000): Promise<T> {
   return new Promise((resolve, reject) => {

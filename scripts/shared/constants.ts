@@ -2,6 +2,8 @@ import * as path from 'node:path';
 
 // Filesystem
 export const DB_PATH = path.join(process.cwd(), 'users.db');
+export const DB_KEY_PATH = path.join(process.cwd(), 'db-secret.key');
+export const DB_KEY_ENV = 'UIX_DB_KEY';
 export const PUBLIC_DIR = path.join(process.cwd(), 'public');
 export const PAGES_DIR = path.join(process.cwd(), 'pages');
 

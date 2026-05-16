@@ -5,7 +5,7 @@ import posthtml from 'posthtml';
 import include from 'posthtml-include';
 import expressions from 'posthtml-expressions';
 
-import { PAGES_DIR, PUBLIC_DIR } from './constants';
+import { PAGES_DIR, PUBLIC_DIR } from '../shared/constants';
 
 const processor = posthtml([
   include({ root: PAGES_DIR }),

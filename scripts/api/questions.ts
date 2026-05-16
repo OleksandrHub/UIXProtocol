@@ -9,8 +9,8 @@ import {
   listUsers,
   shareQuestions,
   updateQuestion,
-} from './db';
-import { readJson, requireAuth, sendJson, sendNoContent } from './api-helpers';
+} from '../db';
+import { readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
 
 export async function handleQuestions(
   req: IncomingMessage,

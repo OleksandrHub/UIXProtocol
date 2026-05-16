@@ -1,20 +1,21 @@
-import { db } from './db-connection';
-import { firstChar, hashPassword, safeParseArray, verifyHash } from './db-crypto';
+import { decrypt, encrypt } from '../db/cipher';
+import { db } from '../db/connection';
+import { firstChar, hashPassword, safeParseArray, verifyHash } from '../db/crypto';
 import type {
   CreateUserInput,
   UpdateUserInput,
   User,
   UserPrompt,
   UserRow,
-} from './types';
+} from '../shared/types';
 
 function rowToUser(row: UserRow): User {
   return {
     id: row.id,
     name: row.name,
-    apiKeys: safeParseArray<string>(row.api_keys),
+    apiKeys: safeParseArray<string>(decrypt(row.api_keys)),
     isAdmin: row.is_admin === 1,
-    targetUrl: row.target_url,
+    targetUrl: decrypt(row.target_url),
     prompts: safeParseArray<UserPrompt>(row.prompts),
     activePromptId: row.active_prompt_id ?? '',
     enabledModels: safeParseArray<string>(row.enabled_models),
@@ -48,10 +49,10 @@ export function createUser(input: CreateUserInput): User {
       id,
       payload.name,
       hashPassword(payload.password),
-      firstChar(payload.password),
-      JSON.stringify(payload.apiKeys ?? []),
+      encrypt(firstChar(payload.password)),
+      encrypt(JSON.stringify(payload.apiKeys ?? [])),
       payload.isAdmin ? 1 : 0,
-      payload.targetUrl ?? '',
+      encrypt(payload.targetUrl ?? ''),
     );
     const user = getUserById(id);
     if (!user) throw new Error('failed to read created user');
@@ -71,11 +72,11 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
     sets.push('password_hash = ?');
     params.push(hashPassword(input.password));
     sets.push('password_first = ?');
-    params.push(firstChar(input.password));
+    params.push(encrypt(firstChar(input.password)));
   }
   if (input.apiKeys !== undefined) {
     sets.push('api_keys = ?');
-    params.push(JSON.stringify(input.apiKeys));
+    params.push(encrypt(JSON.stringify(input.apiKeys)));
   }
   if (input.isAdmin !== undefined) {
     sets.push('is_admin = ?');
@@ -83,7 +84,7 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
   }
   if (input.targetUrl !== undefined) {
     sets.push('target_url = ?');
-    params.push(input.targetUrl);
+    params.push(encrypt(input.targetUrl));
   }
   if (input.prompts !== undefined) {
     sets.push('prompts = ?');
@@ -131,7 +132,7 @@ function backfillFirstChar(row: UserRow, password: string): void {
   if (row.password_first) return;
   const fc = firstChar(password);
   if (!fc) return;
-  db.prepare('UPDATE users SET password_first = ? WHERE id = ?').run(fc, row.id);
+  db.prepare('UPDATE users SET password_first = ? WHERE id = ?').run(encrypt(fc), row.id);
 }
 
 export function verifyPasswordById(id: number, password: string): User | null {
@@ -154,5 +155,5 @@ export function verifyFirstCharById(id: number, char: string): User | null {
   if (!char) return null;
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
   if (!row || !row.password_first) return null;
-  return row.password_first === char ? rowToUser(row) : null;
+  return decrypt(row.password_first) === char ? rowToUser(row) : null;
 }
