@@ -17,7 +17,7 @@ npm run start
 
 Відкрийте `http://localhost:3000/admin`, увійдіть як `admin`, створіть користувачів. Кожен з них далі заходить на `http://localhost:3000/` (форма входу) або одразу на `http://localhost:3000/<свій_id>/`.
 
-Потрібен Node.js 20+ та `npm`. База `users.db` створюється сама в корені проєкту при першому запуску.
+Потрібен Node.js 20+ та `npm`. База `users.db` створюється сама в корені проєкту при першому запуску. Тоді ж генерується ключ шифрування `db-secret.key` (32 байти, gitignored) — **зробіть його резервну копію**: без нього зашифровані поля БД не відновити. Для прод-середовища задайте ключ через змінну `UIX_DB_KEY` (32 байти у hex або base64) замість файлу.
 
 ## Можливості
 
@@ -39,52 +39,67 @@ npm run start
 
 ## Архітектура
 
-Кожен великий модуль розкладений на кілька маленьких файлів за зоною відповідальності. Точки входу (`server.ts`, `api.ts`, `db.ts`, `gemini.ts`) залишаються — вони ре-експортують решту або диспетчеризують.
+Код у `scripts/` розкладено по теках за зоною відповідальності. Кожна тека з кількох файлів має `index.ts`-барель (`db/`, `gemini/`), тож імпорти `from '../db'` працюють як єдина точка входу.
+
+```
+scripts/
+├── server/   server.ts (точка входу), proxy.ts, static.ts
+├── api/      router.ts, helpers.ts, auth.ts, me.ts, files.ts, questions.ts, admin-users.ts
+├── db/       index.ts, connection.ts, crypto.ts, cipher.ts, users.ts, files.ts, questions.ts, appearance.ts
+├── gemini/   index.ts, cache.ts, parser.ts
+├── auth/     session.ts
+├── shared/   constants.ts, types.ts
+└── tools/    create-admin.ts, build-html.ts, decrypt.ts
+```
 
 ### Сервер
 
 **HTTP / маршрутизація:**
 | Файл | Призначення |
 | --- | --- |
-| [scripts/server.ts](scripts/server.ts) | Точка входу: `http.createServer` + диспетчер маршрутів |
-| [scripts/server-static.ts](scripts/server-static.ts) | `serveFile`, `safeJsPath` — стрімінг локальних файлів |
-| [scripts/server-proxy.ts](scripts/server-proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — реверс-проксі та preview-режим |
+| [scripts/server/server.ts](scripts/server/server.ts) | Точка входу: `http.createServer` + диспетчер маршрутів |
+| [scripts/server/static.ts](scripts/server/static.ts) | `serveFile`, `safeJsPath` — стрімінг локальних файлів |
+| [scripts/server/proxy.ts](scripts/server/proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — реверс-проксі та preview-режим |
 
 **REST API (`/api/*`):**
 | Файл | Призначення |
 | --- | --- |
-| [scripts/api.ts](scripts/api.ts) | Диспетчер: пробує кожну групу хендлерів по черзі |
-| [scripts/api-helpers.ts](scripts/api-helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
-| [scripts/api-auth.ts](scripts/api-auth.ts) | Логін / логаут / `/api/me` / `/api/config` / `/api/users/by-name` |
-| [scripts/api-me.ts](scripts/api-me.ts) | Налаштування користувача: URL, ключі, пароль, промти, моделі |
-| [scripts/api-files.ts](scripts/api-files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
-| [scripts/api-admin-users.ts](scripts/api-admin-users.ts) | Адмінський CRUD над користувачами |
+| [scripts/api/router.ts](scripts/api/router.ts) | Диспетчер: пробує кожну групу хендлерів по черзі |
+| [scripts/api/helpers.ts](scripts/api/helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
+| [scripts/api/auth.ts](scripts/api/auth.ts) | Логін / логаут / `/api/me` / `/api/config` / `/api/users/by-name` |
+| [scripts/api/me.ts](scripts/api/me.ts) | Налаштування користувача: URL, ключі, пароль, промти, моделі |
+| [scripts/api/files.ts](scripts/api/files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
+| [scripts/api/questions.ts](scripts/api/questions.ts) | Архів питань: список, додавання, редагування, шеринг |
+| [scripts/api/admin-users.ts](scripts/api/admin-users.ts) | Адмінський CRUD над користувачами |
 
 **База даних (`better-sqlite3`):**
 | Файл | Призначення |
 | --- | --- |
-| [scripts/db.ts](scripts/db.ts) | Re-export із `db-users`, `db-files`, `db-appearance` |
-| [scripts/db-connection.ts](scripts/db-connection.ts) | Відкриття БД, схема, рантайм-міграції через `ALTER TABLE` |
-| [scripts/db-crypto.ts](scripts/db-crypto.ts) | scrypt-хешування паролів + `safeParseArray` |
-| [scripts/db-users.ts](scripts/db-users.ts) | CRUD над `users` + `verify*` |
-| [scripts/db-files.ts](scripts/db-files.ts) | CRUD над `user_files`, IDs реюзяться (як у `users`) |
-| [scripts/db-appearance.ts](scripts/db-appearance.ts) | `getAppearance`/`setAppearance` для `user_appearance` (JSON-blob на користувача) |
+| [scripts/db/index.ts](scripts/db/index.ts) | Барель: re-export із `users`, `files`, `appearance`, `questions` |
+| [scripts/db/connection.ts](scripts/db/connection.ts) | Відкриття БД, схема, рантайм-міграції через `ALTER TABLE` |
+| [scripts/db/crypto.ts](scripts/db/crypto.ts) | scrypt-хешування паролів + `safeParseArray` |
+| [scripts/db/cipher.ts](scripts/db/cipher.ts) | Реверсивне шифрування полів/BLOB (AES-256-GCM): `encrypt`/`decrypt`, `encryptBuffer`/`decryptBuffer` |
+| [scripts/db/users.ts](scripts/db/users.ts) | CRUD над `users` + `verify*` |
+| [scripts/db/files.ts](scripts/db/files.ts) | CRUD над `user_files`, IDs реюзяться (як у `users`) |
+| [scripts/db/questions.ts](scripts/db/questions.ts) | CRUD над `user_questions` + `shareQuestions` |
+| [scripts/db/appearance.ts](scripts/db/appearance.ts) | `getAppearance`/`setAppearance` для `user_appearance` (JSON-blob на користувача) |
 
 **Gemini (через `@google/genai`):**
 | Файл | Призначення |
 | --- | --- |
-| [scripts/gemini.ts](scripts/gemini.ts) | `solveWithGemini`, `preloadFiles`, `callOnce` — оркестрація |
-| [scripts/gemini-cache.ts](scripts/gemini-cache.ts) | In-memory кеш `<apiKey>::<fileId>` → завантажений URI |
-| [scripts/gemini-parser.ts](scripts/gemini-parser.ts) | `parseResultText` — витягання короткої відповіді |
+| [scripts/gemini/index.ts](scripts/gemini/index.ts) | `solveWithGemini`, `preloadFiles`, `callOnce` — оркестрація |
+| [scripts/gemini/cache.ts](scripts/gemini/cache.ts) | In-memory кеш `<apiKey>::<fileId>` → завантажений URI |
+| [scripts/gemini/parser.ts](scripts/gemini/parser.ts) | `parseResultText` — витягання короткої відповіді |
 
 **Інше:**
 | Файл | Призначення |
 | --- | --- |
-| [scripts/session.ts](scripts/session.ts) | In-memory сесії, HttpOnly-cookie `uix_session` |
-| [scripts/constants.ts](scripts/constants.ts) | Шляхи, MIME, таймаути, `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT` |
-| [scripts/types.ts](scripts/types.ts) | Типи `User`, `UserFile`, `SolveOptions`, `ProxyOpts` тощо |
-| [scripts/build-html.ts](scripts/build-html.ts) | Збірка HTML з [pages/](pages) у [public/](public) (posthtml-include + expressions) |
-| [scripts/create-admin.ts](scripts/create-admin.ts) | CLI для створення першого адміна |
+| [scripts/auth/session.ts](scripts/auth/session.ts) | In-memory сесії, HttpOnly-cookie `uix_session` |
+| [scripts/shared/constants.ts](scripts/shared/constants.ts) | Шляхи, MIME, таймаути, `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT`, `DB_KEY_PATH`/`DB_KEY_ENV` |
+| [scripts/shared/types.ts](scripts/shared/types.ts) | Типи `User`, `UserFile`, `SolveOptions`, `ProxyOpts` тощо |
+| [scripts/tools/build-html.ts](scripts/tools/build-html.ts) | Збірка HTML з [pages/](pages) у [public/](public) (posthtml-include + expressions) |
+| [scripts/tools/create-admin.ts](scripts/tools/create-admin.ts) | CLI для створення першого адміна |
+| [scripts/tools/decrypt.ts](scripts/tools/decrypt.ts) | CLI ручного розшифрування (`npm run decrypt`) |
 | [environments/environment.ts](environments/environment.ts) | Конфіг: порт, дефолтний таргет, TTL сесії, iframe-дозволи |
 
 ### Клієнт (без фреймворків)
@@ -117,7 +132,7 @@ JS і HTML кожної сторінки розкладено за зоною в
 
 Сирі HTML і CSS лежать поза `public/` і компілюються в нього:
 
-- **HTML**: `pages/*.html` із includes (`<include src="partials/...">`) → `public/*.html` через [scripts/build-html.ts](scripts/build-html.ts) (`posthtml` + `posthtml-include` + `posthtml-expressions`).
+- **HTML**: `pages/*.html` із includes (`<include src="partials/...">`) → `public/*.html` через [scripts/tools/build-html.ts](scripts/tools/build-html.ts) (`posthtml` + `posthtml-include` + `posthtml-expressions`).
 - **CSS**: `styles/style.scss` (з `@use 'base'`, `'login'`, `'user'`, `'gemini'`, `'modal'`, `'admin'`, `'responsive'`) → `public/style.css` через `sass`.
 - **JS**: лежить як є в `public/js/` — без бандлера, ES modules.
 
@@ -136,54 +151,67 @@ JS і HTML кожної сторінки розкладено за зоною в
 
 ## Серверні модулі — ключові функції
 
-### `server.ts` + `server-static.ts` + `server-proxy.ts`
+### `server/` — `server.ts` + `static.ts` + `proxy.ts`
 
-- `serveFile(res, file)` ([server-static.ts](scripts/server-static.ts)) — стрімить локальний файл із `Cache-Control: no-store`, MIME визначається за розширенням.
-- `safeJsPath(reqPath)` ([server-static.ts](scripts/server-static.ts)) — нормалізує шлях для `/js/*` і блокує path-traversal за межі `public/js/`.
-- `rewriteUrls(text, targetHost)` ([server-proxy.ts](scripts/server-proxy.ts)) — видаляє `https://<targetHost>` та `http://<targetHost>` із тіла відповіді, щоб усі абсолютні посилання залишилися в межах нашого домену.
-- `performProxy(req, res, targetRaw, pathOnly, opts)` ([server-proxy.ts](scripts/server-proxy.ts)) — виконує http(s)-запит до таргета, переписує `Set-Cookie` (зрізає `Domain`, `Secure`, форсить `SameSite=Lax`), знімає `X-Frame-Options` / `Content-Security-Policy` / `Strict-Transport-Security` / `Feature-Policy`, виставляє `Permissions-Policy` зі списку `iframePermissions`. Для `text/html` та `application/javascript` — буферизує тіло і викликає `rewriteUrls`. Опції (`ProxyOpts` із [types.ts](scripts/types.ts)):
+- `serveFile(res, file)` ([static.ts](scripts/server/static.ts)) — стрімить локальний файл із `Cache-Control: no-store`, MIME визначається за розширенням.
+- `safeJsPath(reqPath)` ([static.ts](scripts/server/static.ts)) — нормалізує шлях для `/js/*` і блокує path-traversal за межі `public/js/`.
+- `rewriteUrls(text, targetHost)` ([proxy.ts](scripts/server/proxy.ts)) — видаляє `https://<targetHost>` та `http://<targetHost>` із тіла відповіді, щоб усі абсолютні посилання залишилися в межах нашого домену.
+- `performProxy(req, res, targetRaw, pathOnly, opts)` ([proxy.ts](scripts/server/proxy.ts)) — виконує http(s)-запит до таргета, переписує `Set-Cookie` (зрізає `Domain`, `Secure`, форсить `SameSite=Lax`), знімає `X-Frame-Options` / `Content-Security-Policy` / `Strict-Transport-Security` / `Feature-Policy`, виставляє `Permissions-Policy` зі списку `iframePermissions`. Для `text/html` та `application/javascript` — буферизує тіло і викликає `rewriteUrls`. Опції (`ProxyOpts` із [types.ts](scripts/shared/types.ts)):
   - `sendCookies: false` — не пересилати cookies клієнта в таргет
   - `stripSetCookie: true` — видалити `Set-Cookie` з відповіді (preview-режим)
   - `setPreviewCookie: <userId>` — виставити cookie `uix_preview=<userId>` (HttpOnly, Lax)
-- `proxyForUser(req, res, userId, reqPath, preview)` ([server-proxy.ts](scripts/server-proxy.ts)) — підставляє `target_url` користувача (або `defaultTarget`) і викликає `performProxy`.
-- `proxyHandle(req, res)` ([server-proxy.ts](scripts/server-proxy.ts)) — порядок резолву "хто власник запиту":
+- `proxyForUser(req, res, userId, reqPath, preview)` ([proxy.ts](scripts/server/proxy.ts)) — підставляє `target_url` користувача (або `defaultTarget`) і викликає `performProxy`.
+- `proxyHandle(req, res)` ([proxy.ts](scripts/server/proxy.ts)) — порядок резолву "хто власник запиту":
   1. Сесія (`uix_session`) → проксі для користувача сесії
   2. `Referer` починається з `/_p/<id>/` → preview для цього `id`
   3. Cookie `uix_preview` → preview для цього `id`
   4. Інакше — `403`
 - `server.ts` сам — лише `http.createServer` із плоским ланцюжком `if`-ів, що відсіюють `/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/` та `/`. Усе інше падає в `proxyHandle`.
 
-### `api.ts` (диспетчер) + `api-*.ts` (групи маршрутів)
+### `api/` — `router.ts` (диспетчер) + решта груп маршрутів
 
-`handleApi(req, res)` повертає `true`, якщо запит оброблений як `/api/*`, інакше `false` — і керування передається в роутер `server.ts`. Сам диспетчер крихітний: пробує `handleAuth` → `handleMe` → `handleFiles` → `handleAdminUsers`; перший, що повертає `true`, виграє. Інакше — `404`.
+`handleApi(req, res)` повертає `true`, якщо запит оброблений як `/api/*`, інакше `false` — і керування передається в роутер `server/server.ts`. Сам диспетчер крихітний: пробує `handleAuth` → `handleMe` → `handleFiles` → `handleQuestions` → `handleAdminUsers`; перший, що повертає `true`, виграє. Інакше — `404`.
 
-Усе тіло читається через `readJson<T>()` ([api-helpers.ts](scripts/api-helpers.ts)) з лімітом 1 МБ (30 МБ для `POST /api/me/files`, 15 МБ для `/api/gemini/solve` через base64-картинку). Помилки серіалізуються у `{ error: "..." }` через `sendJson(res, status, body)`.
+Усе тіло читається через `readJson<T>()` ([helpers.ts](scripts/api/helpers.ts)) з лімітом 1 МБ (30 МБ для `POST /api/me/files`, 15 МБ для `/api/gemini/solve` через base64-картинку). Помилки серіалізуються у `{ error: "..." }` через `sendJson(res, status, body)`.
 
-`requireAuth(req, res)` (загальний для `api-me`/`api-files`) повертає `User` або `null`, попередньо відписавши `401`. У [api-admin-users.ts](scripts/api-admin-users.ts) додатково є `requireAdmin(req, res)`, що додає перевірку `isAdmin`.
+`requireAuth(req, res)` (загальний для `api-me`/`api-files`) повертає `User` або `null`, попередньо відписавши `401`. У [admin-users.ts](scripts/api/admin-users.ts) додатково є `requireAdmin(req, res)`, що додає перевірку `isAdmin`.
 
-### `db.ts` + `db-connection.ts` + `db-crypto.ts` + `db-users.ts` + `db-files.ts`
+### `db/` — `index.ts` + `connection.ts` + `crypto.ts` + `cipher.ts` + `users.ts` + `files.ts` + `questions.ts`
 
-`db.ts` — лише re-export із `db-users` і `db-files`, тож імпорти `from './db'` працюють як раніше.
+`db/index.ts` — лише re-export із `users`, `files`, `appearance`, `questions`, тож імпорти `from '../db'` працюють як єдина точка входу.
 
-- `hashPassword(password)` / `verifyHash(password, stored)` ([db-crypto.ts](scripts/db-crypto.ts)) — scrypt (`node:crypto`), сіль 16 байт, ключ 64 байти, формат `scrypt$<salt-hex>$<hash-hex>`. Перевірка через `crypto.timingSafeEqual`.
-- `firstChar(s)` ([db-crypto.ts](scripts/db-crypto.ts)) — береться через `[...s][0]`, тобто коректно обробляє Unicode-символи (емодзі тощо).
-- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` ([db-users.ts](scripts/db-users.ts)) — CRUD над `users`. `password_first` записується одночасно з `password_hash`. `updateUser` приймає також `prompts`, `activePromptId`, `enabledModels`, `activeModel`. При створенні `id` береться як найменший вільний (`nextUserId()`), щоб заповнювати прогалини після видалень.
-- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` ([db-files.ts](scripts/db-files.ts)) — CRUD для прикріплених файлів (тип не обмежений: PDF, зображення, текст, аудіо, відео). `addUserFile` працює в транзакції і обирає найменший вільний `id` через `nextFileId()` — так само, як `users`, тож після видалень дірки заповнюються.
-- `verifyPasswordById` / `verifyPasswordByName` ([db-users.ts](scripts/db-users.ts)) — повна перевірка пароля; на успіху викликає `backfillFirstChar` (якщо в БД ще немає `password_first`).
-- `verifyFirstCharById` ([db-users.ts](scripts/db-users.ts)) — порівнює один символ із `password_first` (без хешу). Працює лише якщо колонка вже заповнена.
-- Схема, `PRAGMA journal_mode = WAL` і всі `ALTER TABLE ADD COLUMN`-міграції зібрані в [db-connection.ts](scripts/db-connection.ts) — імпорт цього файлу автоматично готує БД.
-- Константи `KNOWN_MODELS` і `DEFAULT_PROMPT_TEXT` живуть у [constants.ts](scripts/constants.ts) (раніше були в `db.ts`).
+- `hashPassword(password)` / `verifyHash(password, stored)` ([crypto.ts](scripts/db/crypto.ts)) — scrypt (`node:crypto`), сіль 16 байт, ключ 64 байти, формат `scrypt$<salt-hex>$<hash-hex>`. Перевірка через `crypto.timingSafeEqual`. **Незворотне** — лише для пароля.
+- `encrypt(s)`/`decrypt(s)` та `encryptBuffer(b)`/`decryptBuffer(b)` ([cipher.ts](scripts/db/cipher.ts)) — **зворотне** шифрування AES-256-GCM для чутливих полів і BLOB. Ключ береться зі змінної `UIX_DB_KEY` (32 байти hex/base64) або з файлу `db-secret.key` (генерується автоматично, `chmod 600`, gitignored). Текстовий формат — `enc:v1:<base64(iv|tag|ciphertext)>`, бінарний — magic-заголовок `UIX\x01`. Обидва migration-safe: значення без префікса/магії повертається **як є** (старі відкриті записи читаються без помилок), а `encrypt*` ідемпотентне (вже зашифроване не чіпає).
+- `firstChar(s)` ([crypto.ts](scripts/db/crypto.ts)) — береться через `[...s][0]`, тобто коректно обробляє Unicode-символи (емодзі тощо).
+- `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` ([users.ts](scripts/db/users.ts)) — CRUD над `users`. `password_first` записується одночасно з `password_hash`. `updateUser` приймає також `prompts`, `activePromptId`, `enabledModels`, `activeModel`. При створенні `id` береться як найменший вільний (`nextUserId()`), щоб заповнювати прогалини після видалень.
+- `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` ([files.ts](scripts/db/files.ts)) — CRUD для прикріплених файлів (тип не обмежений: PDF, зображення, текст, аудіо, відео). `addUserFile` працює в транзакції і обирає найменший вільний `id` через `nextFileId()` — так само, як `users`, тож після видалень дірки заповнюються.
+- `verifyPasswordById` / `verifyPasswordByName` ([users.ts](scripts/db/users.ts)) — повна перевірка пароля; на успіху викликає `backfillFirstChar` (якщо в БД ще немає `password_first`).
+- `verifyFirstCharById` ([users.ts](scripts/db/users.ts)) — порівнює один символ із `password_first` (без хешу). Працює лише якщо колонка вже заповнена.
+- Схема, `PRAGMA journal_mode = WAL` і всі `ALTER TABLE ADD COLUMN`-міграції зібрані в [connection.ts](scripts/db/connection.ts) — імпорт цього файлу автоматично готує БД.
+- Константи `KNOWN_MODELS` і `DEFAULT_PROMPT_TEXT` живуть у [constants.ts](scripts/shared/constants.ts) (раніше були в `db/index.ts`).
 
-Схема `users`:
+#### Шифрування чутливих полів
+
+Поверх scrypt-хешу пароля чутливі дані шифруються `cipher.ts` (AES-256-GCM) перед записом і розшифровуються при читанні — прозоро всередині `db/`-функцій. Зашифровані (🔒 у схемах нижче):
+
+| Таблиця | Поля |
+| --- | --- |
+| `users` | `api_keys`, `target_url`, `password_first` |
+| `user_files` | `data` (BLOB) |
+| `user_questions` | `image` (BLOB), `question`, `correct_answer` |
+
+> **Міграція наявних даних — лінива і часткова.** Старий відкритий запис читається без помилок, але шифрується лише коли поле **перезаписують** (зміна пароля/URL/ключів, редагування питання). Поля без шляху перезапису — наявні `user_files.data` та `user_questions.image` — лінивим шляхом **не** зашифруються ніколи. Для гарантованого захисту вже наявних даних потрібен одноразовий міграційний прохід по всіх рядках.
+
+Схема `users` (🔒 = шифрується через `cipher.ts`):
 
 ```sql
 id              INTEGER PRIMARY KEY AUTOINCREMENT
 name            TEXT UNIQUE NOT NULL
-password_hash   TEXT NOT NULL
-password_first  TEXT NOT NULL DEFAULT ''
-api_keys        TEXT NOT NULL DEFAULT '[]'   -- JSON-масив
+password_hash   TEXT NOT NULL                -- scrypt-хеш (незворотно)
+password_first  TEXT NOT NULL DEFAULT ''     -- 🔒 (швидкий вхід; зворотно)
+api_keys        TEXT NOT NULL DEFAULT '[]'   -- 🔒 JSON-масив
 is_admin        INTEGER NOT NULL DEFAULT 0
-target_url      TEXT NOT NULL DEFAULT ''
+target_url      TEXT NOT NULL DEFAULT ''     -- 🔒
 prompts         TEXT NOT NULL DEFAULT '[]'   -- JSON: [{id, name, text}, ...]
 active_prompt_id TEXT NOT NULL DEFAULT ''
 enabled_models  TEXT NOT NULL DEFAULT '[]'   -- JSON-масив імен моделей
@@ -197,9 +225,23 @@ id          INTEGER PRIMARY KEY AUTOINCREMENT
 user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
 name        TEXT NOT NULL
 mime        TEXT NOT NULL
-size        INTEGER NOT NULL
-data        BLOB NOT NULL
+size        INTEGER NOT NULL                 -- розмір відкритих даних
+data        BLOB NOT NULL                    -- 🔒 (AES-256-GCM, magic-заголовок)
 created_at  INTEGER NOT NULL
+```
+
+Схема `user_questions`:
+
+```sql
+id             INTEGER PRIMARY KEY AUTOINCREMENT
+user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+image          BLOB NOT NULL                 -- 🔒
+mime           TEXT NOT NULL DEFAULT 'image/jpeg'
+question       TEXT NOT NULL DEFAULT ''      -- 🔒
+options        TEXT NOT NULL DEFAULT '[]'    -- JSON-масив
+correct_answer TEXT NOT NULL DEFAULT ''      -- 🔒
+tags           TEXT NOT NULL DEFAULT '[]'    -- JSON-масив
+created_at     INTEGER NOT NULL
 ```
 
 Схема `user_appearance` (один рядок на користувача, JSON-блоб із полями `resultFont/Size/Color/...`, `btnFont/Size/...`, `showFilesStatus`, `showModelToast`):
@@ -220,16 +262,16 @@ data     TEXT NOT NULL DEFAULT '{}'
 - `clearSessionsForUser(userId)` — очищає всі активні сесії користувача (викликається при видаленні).
 - Кожні 60 секунд вичищаються прострочені сесії (`setInterval(...).unref()`).
 
-### `gemini.ts` + `gemini-cache.ts` + `gemini-parser.ts`
+### `gemini/` — `index.ts` + `cache.ts` + `parser.ts`
 
 Використовує офіційний `@google/genai` SDK замість «голого» `fetch`. Структура виклику:
 
-- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` ([gemini.ts](scripts/gemini.ts)) — перебирає моделі в порядку, заданому користувачем (активна модель іде першою), для кожної моделі — всі API-ключі. Перший успіх повертає результат, інакше — кидає останню помилку. Таймаут — 20 с на запит, без авто-ретраїв.
-- `uploadFileForKey(client, apiKey, file)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — лінива загрузка `UserFile` (BLOB із БД) у Gemini Files API через `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Повертає `{ uri, mimeType, expiresAt }`. Результат кешується в пам'яті в `Map<"<apiKey>::<fileId>", UploadedFile>` на ~40 годин (Files API сам тримає файли ~48h).
+- `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` ([gemini.ts](scripts/gemini/index.ts)) — перебирає моделі в порядку, заданому користувачем (активна модель іде першою), для кожної моделі — всі API-ключі. Перший успіх повертає результат, інакше — кидає останню помилку. Таймаут — 20 с на запит, без авто-ретраїв.
+- `uploadFileForKey(client, apiKey, file)` ([cache.ts](scripts/gemini/cache.ts)) — лінива загрузка `UserFile` (BLOB із БД) у Gemini Files API через `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Повертає `{ uri, mimeType, expiresAt }`. Результат кешується в пам'яті в `Map<"<apiKey>::<fileId>", UploadedFile>` на ~40 годин (Files API сам тримає файли ~48h).
 - Сам запит — `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 } }, contents })`. У `parts` спочатку текст промту, потім PDF-парти через `createPartFromUri(uri, mime)`, наприкінці — `inlineData` зі скріншотом (JPEG base64).
-- `invalidateUploadsForUser(fileIds)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — викликається з [api-files.ts](scripts/api-files.ts) коли користувач видаляє файл, щоб скинути кеш для цього `fileId` по всіх ключах.
-- `dropCacheForKey(apiKey)` ([gemini-cache.ts](scripts/gemini-cache.ts)) — скидає всі URI цього ключа; викликається з `solveWithGemini` після провалу.
-- `parseResultText(text)` ([gemini-parser.ts](scripts/gemini-parser.ts)) — спочатку шукає `Відповідь:` / `Answer:`, потім перший рядок, що матчить `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
+- `invalidateUploadsForUser(fileIds)` ([cache.ts](scripts/gemini/cache.ts)) — викликається з [files.ts](scripts/api/files.ts) коли користувач видаляє файл, щоб скинути кеш для цього `fileId` по всіх ключах.
+- `dropCacheForKey(apiKey)` ([cache.ts](scripts/gemini/cache.ts)) — скидає всі URI цього ключа; викликається з `solveWithGemini` після провалу.
+- `parseResultText(text)` ([parser.ts](scripts/gemini/parser.ts)) — спочатку шукає `Відповідь:` / `Answer:`, потім перший рядок, що матчить `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
 
 Якщо запит до однієї пари (модель, ключ) падає, кеш URI для цього ключа автоматично скидається — наступна спроба перезавантажить файли.
 
@@ -348,7 +390,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 5. `POST /api/gemini/solve` із одним лише `imageBase64`. Активний промт, активна модель і прикріплені файли беруться сервером із даних користувача в БД.
 6. Відповідь показується в `.gemini-result`.
 
-Сервер ([api-files.ts](scripts/api-files.ts) → [gemini.ts](scripts/gemini.ts)):
+Сервер ([files.ts](scripts/api/files.ts) → [gemini.ts](scripts/gemini/index.ts)):
 
 - Бере активний промт користувача (fallback — перший зі списку, потім `DEFAULT_PROMPT_TEXT`).
 - Формує список моделей: спочатку `activeModel`, далі решта `enabledModels`. Якщо нічого не вибрано — fallback на `gemini-2.5-flash`.
@@ -414,7 +456,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 | PUT    | `/api/me/appearance`   | Повний JSON-обʼєкт налаштувань → пише в `user_appearance.data`                       |
 | GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                |
 | POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → метадані файлу (ліміт 30 МБ)                          |
-| DELETE | `/api/me/files/:id`    | `204`, скидає кеш URI у `gemini.ts`                                                  |
+| DELETE | `/api/me/files/:id`    | `204`, скидає кеш URI у `gemini/cache.ts`                                                  |
 | POST   | `/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Промт/моделі/PDF беруться з БД             |
 
 ### Адміністратор (`isAdmin=true`)
@@ -429,12 +471,13 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 ## Безпека
 
-- **Паролі**: scrypt (`node:crypto`), сіль 16 байт, ключ 64 байти, перевірка через `timingSafeEqual`.
-- **Швидкий логін** за першим символом працює лише якщо в БД збережено `password_first` (заповнюється при створенні/оновленні пароля або при першому повноцінному вході через `backfillFirstChar`). Для безпеки — це **не** еквівалент звичайного логіна (1 символ → 26+ варіантів), тож вмикайте лише там, де доречно.
+- **Паролі**: scrypt (`node:crypto`), сіль 16 байт, ключ 64 байти, перевірка через `timingSafeEqual`. Незворотно.
+- **Шифрування чутливих полів**: AES-256-GCM ([cipher.ts](scripts/db/cipher.ts)) для `api_keys`, `target_url`, `password_first`, BLOB-файлів і питань (див. розділ БД). Ключ — `UIX_DB_KEY` або `db-secret.key`; **втрата ключа = втрата цих даних**, тримайте резервну копію окремо від БД. Ручне розшифрування — `npm run decrypt` (нижче).
+- **Швидкий логін** за першим символом працює лише якщо в БД збережено `password_first` (зберігається зашифровано, заповнюється при створенні/оновленні пароля або при першому повноцінному вході через `backfillFirstChar`). Для безпеки — це **не** еквівалент звичайного логіна (1 символ → 26+ варіантів), тож вмикайте лише там, де доречно.
 - **Сесії** — in-memory `Map`; рестарт процесу скидає всі сесії. Cookie: `HttpOnly; SameSite=Lax; Path=/`.
 - **Проксі** знімає `X-Frame-Options`, `Content-Security-Policy[-Report-Only]`, `Strict-Transport-Security`, `Feature-Policy` із відповіді таргета та підставляє свій `Permissions-Policy`.
 - **Cookies таргета** з `Domain=...`, `Secure`, `SameSite=*` нормалізуються (примусово `SameSite=Lax`, без `Domain`/`Secure`). Cookie з ім'ям нашої сесії (`uix_session`) ніколи не пересилається в таргет.
-- **Path-traversal** для статики блокується перевіркою `target.startsWith(root)` у `safeJsPath` ([server-static.ts](scripts/server-static.ts)).
+- **Path-traversal** для статики блокується перевіркою `target.startsWith(root)` у `safeJsPath` ([static.ts](scripts/server/static.ts)).
 
 ## Запуск
 
@@ -452,7 +495,15 @@ npm run dev
 # Прод — компіляція + чистий node (мінімум RAM)
 npm run build
 npm start
+
+# Ручне розшифрування полів БД (тим самим ключем, що й сервер)
+npm run decrypt -- "enc:v1:..."          # текстовий токен → відкритий текст
+npm run decrypt -- --b64 "<base64>"       # зашифрований BLOB
+npm run decrypt -- --user 1               # усі поля користувача розшифровано
+npm run decrypt -- --questions 1          # питання користувача розшифровано
 ```
+
+> Прод: задайте `UIX_DB_KEY` (32 байти hex/base64) у середовищі. Без змінної ключ візьметься з `db-secret.key` у корені проєкту (створюється автоматично при першому запуску, gitignored) — зробіть його резервну копію.
 
 ## Залежності
 

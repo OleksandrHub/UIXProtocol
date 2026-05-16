@@ -6,9 +6,9 @@ import {
   getUserById,
   listUsers,
   updateUser,
-} from './db';
-import { clearSessionsForUser } from './session';
-import { getCurrentUser, readJson, sendJson, sendNoContent } from './api-helpers';
+} from '../db';
+import { clearSessionsForUser } from '../auth/session';
+import { getCurrentUser, readJson, sendJson, sendNoContent } from '../api/helpers';
 
 function requireAdmin(req: IncomingMessage, res: ServerResponse): boolean {
   const me = getCurrentUser(req);

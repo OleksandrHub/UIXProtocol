@@ -5,11 +5,11 @@ import {
   verifyFirstCharById,
   verifyPasswordById,
   verifyPasswordByName,
-} from './db';
-import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from './constants';
-import { clearSession, setSession } from './session';
-import { environment } from '../environments/environment';
-import { getCurrentUser, readJson, sendJson, sendNoContent } from './api-helpers';
+} from '../db';
+import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from '../shared/constants';
+import { clearSession, setSession } from '../auth/session';
+import { environment } from '../../environments/environment';
+import { getCurrentUser, readJson, sendJson, sendNoContent } from '../api/helpers';
 
 export async function handleAuth(
   req: IncomingMessage,

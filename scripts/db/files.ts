@@ -1,5 +1,6 @@
-import { db } from './db-connection';
-import type { UserFile, UserFileMeta, UserFileRow } from './types';
+import { decryptBuffer, encryptBuffer } from '../db/cipher';
+import { db } from '../db/connection';
+import type { UserFile, UserFileMeta, UserFileRow } from '../shared/types';
 
 function nextFileId(): number {
   // Pick the smallest free positive id so deletes free IDs are reused.
@@ -41,14 +42,14 @@ export function getUserFile(userId: number, fileId: number): UserFile | null {
     .prepare('SELECT * FROM user_files WHERE id = ? AND user_id = ?')
     .get(fileId, userId) as UserFileRow | undefined;
   if (!row) return null;
-  return { ...rowToFileMeta(row), data: row.data };
+  return { ...rowToFileMeta(row), data: decryptBuffer(row.data) };
 }
 
 export function getUserFiles(userId: number): UserFile[] {
   const rows = db
     .prepare('SELECT * FROM user_files WHERE user_id = ? ORDER BY id')
     .all(userId) as UserFileRow[];
-  return rows.map((row) => ({ ...rowToFileMeta(row), data: row.data }));
+  return rows.map((row) => ({ ...rowToFileMeta(row), data: decryptBuffer(row.data) }));
 }
 
 export function addUserFile(
@@ -62,7 +63,7 @@ export function addUserFile(
   );
   const create = db.transaction((): UserFileMeta => {
     const id = nextFileId();
-    insert.run(id, userId, name, mime, data.length, data, Date.now());
+    insert.run(id, userId, name, mime, data.length, encryptBuffer(data), Date.now());
     const row = db
       .prepare('SELECT id, user_id, name, mime, size, created_at FROM user_files WHERE id = ?')
       .get(id) as UserFileRow;

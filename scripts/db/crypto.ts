@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-import { SCRYPT_KEYLEN } from './constants';
+import { SCRYPT_KEYLEN } from '../shared/constants';
 
 export function firstChar(s: string): string {
   return [...s][0] ?? '';

@@ -58,3 +58,6 @@ Thumbs.db
 *.db-journal
 *.db-wal
 *.db-shm
+
+# DB encryption key (never commit — losing it makes data unrecoverable)
+db-secret.key

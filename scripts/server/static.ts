@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
 
-import { MIME, PUBLIC_DIR } from './constants';
+import { MIME, PUBLIC_DIR } from '../shared/constants';
 
 export function serveFile(res: http.ServerResponse, file: string): void {
   fs.stat(file, (err, stat) => {

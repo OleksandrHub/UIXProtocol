@@ -1,13 +1,13 @@
 import * as http from 'node:http';
 import * as path from 'node:path';
 
-import { handleApi } from './api';
-import { getSessionUserId } from './session';
-import { getUserById } from './db';
-import { environment } from '../environments/environment';
-import { PREVIEW_RE, PUBLIC_DIR } from './constants';
-import { safeJsPath, serveFile } from './server-static';
-import { proxyForUser, proxyHandle } from './server-proxy';
+import { handleApi } from '../api/router';
+import { getSessionUserId } from '../auth/session';
+import { getUserById } from '../db';
+import { environment } from '../../environments/environment';
+import { PREVIEW_RE, PUBLIC_DIR } from '../shared/constants';
+import { safeJsPath, serveFile } from '../server/static';
+import { proxyForUser, proxyHandle } from '../server/proxy';
 
 http
   .createServer(async (req, res) => {

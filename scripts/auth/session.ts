@@ -1,8 +1,8 @@
 import * as crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { PREVIEW_COOKIE, SESSION_COOKIE_NAME } from './constants';
-import { environment } from '../environments/environment';
+import { PREVIEW_COOKIE, SESSION_COOKIE_NAME } from '../shared/constants';
+import { environment } from '../../environments/environment';
 
 const sessions = new Map<string, { userId: number; expiresAt: number }>();
 

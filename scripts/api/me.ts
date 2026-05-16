@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { getAppearance, setAppearance, updateUser } from './db';
-import type { Appearance } from './db-appearance';
-import { KNOWN_MODELS } from './constants';
-import type { UserPrompt } from './types';
-import { readJson, requireAuth, sendJson } from './api-helpers';
+import { getAppearance, setAppearance, updateUser } from '../db';
+import type { Appearance } from '../db/appearance';
+import { KNOWN_MODELS } from '../shared/constants';
+import type { UserPrompt } from '../shared/types';
+import { readJson, requireAuth, sendJson } from '../api/helpers';
 
 export async function handleMe(
   req: IncomingMessage,

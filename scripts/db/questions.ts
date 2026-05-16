@@ -1,13 +1,14 @@
-import { db } from './db-connection';
-import { safeParseArray } from './db-crypto';
-import type { QuestionImage, QuestionMeta, QuestionRow } from './types';
+import { decrypt, decryptBuffer, encrypt, encryptBuffer } from '../db/cipher';
+import { db } from '../db/connection';
+import { safeParseArray } from '../db/crypto';
+import type { QuestionImage, QuestionMeta, QuestionRow } from '../shared/types';
 
 function rowToMeta(row: QuestionRow): QuestionMeta {
   return {
     id: row.id,
-    question: row.question,
+    question: decrypt(row.question),
     options: safeParseArray<string>(row.options),
-    correctAnswer: row.correct_answer,
+    correctAnswer: decrypt(row.correct_answer),
     tags: safeParseArray<string>(row.tags),
     createdAt: row.created_at,
   };
@@ -40,11 +41,11 @@ export function addQuestion(
     )
     .run(
       userId,
-      image,
+      encryptBuffer(image),
       mime || 'image/jpeg',
-      question ?? '',
+      encrypt(question ?? ''),
       JSON.stringify(Array.isArray(options) ? options : []),
-      correctAnswer ?? '',
+      encrypt(correctAnswer ?? ''),
       JSON.stringify(Array.isArray(tags) ? tags : []),
       Date.now(),
     );
@@ -59,7 +60,7 @@ export function getQuestionImage(userId: number, id: number): QuestionImage | nu
     .prepare('SELECT image, mime FROM user_questions WHERE id = ? AND user_id = ?')
     .get(id, userId) as { image: Buffer; mime: string } | undefined;
   if (!row || !row.image || row.image.length === 0) return null;
-  return { data: row.image, mime: row.mime };
+  return { data: decryptBuffer(row.image), mime: row.mime };
 }
 
 export function updateQuestion(
@@ -71,7 +72,7 @@ export function updateQuestion(
   const params: unknown[] = [];
   if (patch.question !== undefined) {
     sets.push('question = ?');
-    params.push(patch.question);
+    params.push(encrypt(patch.question));
   }
   if (patch.options !== undefined) {
     sets.push('options = ?');
@@ -79,7 +80,7 @@ export function updateQuestion(
   }
   if (patch.correctAnswer !== undefined) {
     sets.push('correct_answer = ?');
-    params.push(patch.correctAnswer);
+    params.push(encrypt(patch.correctAnswer));
   }
   if (patch.tags !== undefined) {
     sets.push('tags = ?');

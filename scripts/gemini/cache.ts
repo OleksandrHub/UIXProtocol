@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 
-import { FILE_TTL_MS, REQUEST_TIMEOUT_MS } from './constants';
-import type { UploadedFile, UserFile } from './types';
+import { FILE_TTL_MS, REQUEST_TIMEOUT_MS } from '../shared/constants';
+import type { UploadedFile, UserFile } from '../shared/types';
 
 const uploadCache = new Map<string, UploadedFile>();
 
