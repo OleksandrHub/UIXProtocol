@@ -11,7 +11,8 @@
     "build:css": "sass styles/style.scss public/style.css",
     "build:css:watch": "sass --watch styles/style.scss:public/style.css",
     "create-admin": "tsx ./scripts/tools/create-admin.ts",
-    "decrypt": "tsx ./scripts/tools/decrypt.ts"
+    "decrypt": "tsx ./scripts/tools/decrypt.ts",
+    "encrypt-legacy": "tsx ./scripts/tools/encrypt-legacy.ts"
   },
   "prettier": {
     "printWidth": 100,

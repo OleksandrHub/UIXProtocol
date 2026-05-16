@@ -61,3 +61,4 @@ Thumbs.db
 
 # DB encryption key (never commit — losing it makes data unrecoverable)
 db-secret.key
+loaderio-*.txt
