@@ -170,11 +170,24 @@ function rewriteViewport(html: string): string {
   return html;
 }
 
+function pickForwardProxy(userId: number | null): URL | null {
+  const list = environment.forwardProxies;
+  if (!list.length || userId == null) return null;
+  const raw = list[Math.abs(userId) % list.length];
+  if (!raw) return null;
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+
 function performProxy(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   targetRaw: string,
   pathOnly: string,
+  userId: number | null,
   opts: ProxyOpts = {}
 ): void {
   const TARGET = /^https?:\/\//i.test(targetRaw) ? targetRaw : `https://${targetRaw}`;
@@ -226,15 +239,37 @@ function performProxy(
   incomingHeaders['x-forwarded-proto'] = 'https';
   incomingHeaders['x-forwarded-host'] = targetHost;
 
-  const isHttps = TARGET.startsWith('https:');
-  const lib = isHttps ? https : http;
-  const port = isHttps ? 443 : 80;
+  // If a forward-proxy laptop is selected for this user, the outbound TCP
+  // goes through the laptop (so target sees the laptop's IP). The laptop
+  // expects the real target URL in X-Relay-Url and re-writes Host on its end.
+  const fwdProxy = pickForwardProxy(userId);
+  let outboundHostname: string;
+  let outboundPort: number;
+  let outboundPath: string;
+  let outboundLib: typeof http | typeof https;
+  if (fwdProxy) {
+    outboundHostname = fwdProxy.hostname;
+    outboundPort = Number(fwdProxy.port) || (fwdProxy.protocol === 'https:' ? 443 : 80);
+    outboundPath = (fwdProxy.pathname === '/' ? '' : fwdProxy.pathname) + (fwdProxy.search ?? '');
+    if (!outboundPath) outboundPath = '/';
+    outboundLib = fwdProxy.protocol === 'https:' ? https : http;
+    incomingHeaders.host = fwdProxy.host;
+    incomingHeaders['x-relay-url'] = targetUrl.href;
+    if (environment.forwardProxySecret) {
+      incomingHeaders['x-relay-secret'] = environment.forwardProxySecret;
+    }
+  } else {
+    outboundHostname = targetUrl.hostname;
+    outboundPort = TARGET.startsWith('https:') ? 443 : 80;
+    outboundPath = targetUrl.pathname + targetUrl.search;
+    outboundLib = TARGET.startsWith('https:') ? https : http;
+  }
 
-  const proxyReq = lib.request(
+  const proxyReq = outboundLib.request(
     {
-      hostname: targetUrl.hostname,
-      port,
-      path: targetUrl.pathname + targetUrl.search,
+      hostname: outboundHostname,
+      port: outboundPort,
+      path: outboundPath,
       method: req.method,
       headers: incomingHeaders,
     },
@@ -327,7 +362,7 @@ export function proxyForUser(
     res.end('No target URL set for this user');
     return;
   }
-  performProxy(req, res, target, reqPath, preview ? { setPreviewCookie: userId } : {});
+  performProxy(req, res, target, reqPath, userId, preview ? { setPreviewCookie: userId } : {});
 }
 
 function getCookiePreviewId(req: http.IncomingMessage): number | null {

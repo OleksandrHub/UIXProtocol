@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as http from 'node:http';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { handleApi } from '../api/router';
@@ -111,6 +112,15 @@ http
 
     proxyHandle(req, res);
   })
-  .listen(environment.port, () => {
-    console.log(`✅  Server → http://localhost:${environment.port}`);
+  .listen(environment.port, '0.0.0.0', () => {
+    const port = environment.port;
+    console.log(`✅  Backend listening on 0.0.0.0:${port}`);
+    console.log(`    Local:    http://localhost:${port}`);
+    for (const name of Object.keys(os.networkInterfaces())) {
+      for (const iface of os.networkInterfaces()[name] ?? []) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          console.log(`    Network:  http://${iface.address}:${port}   (${name})`);
+        }
+      }
+    }
   });

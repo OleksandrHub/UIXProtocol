@@ -2,6 +2,8 @@ export const environment = {
   production: true,
   defaultTarget: 'https://dl.tntu.edu.ua',
   port: 3000,
+  forwardProxies: ['http://192.168.110.251:8787'] as string[],
+  forwardProxySecret: process.env.LAPTOP_PROXY_SECRET ?? '',
   sessionTtlMs: 60 * 60 * 1000,
   iframePermissions: [
     'camera',
