@@ -3,3 +3,4 @@ export * from '../db/files';
 export * from '../db/appearance';
 export * from '../db/questions';
 export * from '../db/errors';
+export * from '../db/friends';

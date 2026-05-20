@@ -129,11 +129,15 @@ export async function handleFiles(
 
     const knownSet = new Set<string>(KNOWN_MODELS);
     const enabled = (me.enabledModels ?? []).filter((m) => knownSet.has(m));
-    const ordered =
+    // Use ONLY the active model. Fallback to other models would mask the
+    // selected choice (and burn quota on backups). Multiple API keys are
+    // still tried for that one model so a single rate-limited key doesn't
+    // kill the request.
+    const activeModel =
       me.activeModel && enabled.includes(me.activeModel)
-        ? [me.activeModel, ...enabled.filter((m) => m !== me.activeModel)]
-        : enabled;
-    const models = ordered.length ? ordered : ['gemini-2.5-flash'];
+        ? me.activeModel
+        : (enabled[0] ?? 'gemini-2.5-flash');
+    const models = [activeModel];
 
     const files = getUserFiles(me.id);
 

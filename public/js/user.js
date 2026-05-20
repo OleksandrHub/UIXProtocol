@@ -10,6 +10,7 @@ import { initFilesStatus } from './user-files-status.js';
 import { initFrameActivity } from './user-frame-activity.js';
 import { initSettings } from './user-settings.js';
 import { initArchive } from './user-archive.js';
+import { initFriends } from './user-friends.js';
 
 const id = Number(location.pathname.split('/').filter(Boolean)[0]);
 if (!Number.isFinite(id)) location.href = '/';
@@ -82,6 +83,34 @@ async function enterAuthed(me, { fromLogin }) {
   const frameActivity = initFrameActivity({ frame });
   gemini.setAfterSolve(() => filesStatus.refresh());
 
+  const modeBadge = document.getElementById('modeBadge');
+  const screenshotBtnEl = document.getElementById('screenshotBtn');
+  const friends = initFriends({
+    me,
+    geminiResultEl: document.getElementById('geminiResult'),
+    onModeChange: (m, helperName) => {
+      const isFriend = m === 'friend';
+      if (modeBadge) {
+        modeBadge.hidden = !isFriend;
+        modeBadge.textContent = helperName ? `Друг → ${helperName}` : 'Друг';
+      }
+      if (screenshotBtnEl) {
+        screenshotBtnEl.title = isFriend
+          ? `Скріншот → ${helperName ?? 'помічник'}`
+          : 'Скріншот → Gemini';
+      }
+      showModelToast(isFriend ? `режим: ДРУГ (${helperName ?? '?'})` : 'режим: Gemini');
+    },
+    showHint: (text) => showModelToast(text),
+  });
+
+  // S-кнопка / Alt+G / wheel-up: Gemini в normal-режимі, screenshot до друга в friend-режимі.
+  const triggerScreenshot = () => {
+    if (friends.getMode() === 'friend') friends.triggerScreenshot();
+    else gemini.triggerGemini();
+  };
+  if (gemini.button) gemini.button.addEventListener('click', triggerScreenshot);
+
   const cycleModel = async () => {
     const enabled = me.enabledModels ?? [];
     if (!enabled.length) {
@@ -108,10 +137,11 @@ async function enterAuthed(me, { fromLogin }) {
 
   installShortcuts({
     frame,
-    triggerGemini: gemini.triggerGemini,
+    triggerGemini: triggerScreenshot,
     toggleResult: gemini.toggleResult,
     toggleBar,
     cycleModel,
+    toggleFriendMode: friends.toggleMode,
   });
 
   installFavicon(me);
@@ -134,6 +164,12 @@ async function enterAuthed(me, { fromLogin }) {
     onAppearanceChanged: () => {
       filesStatus.applyPrefs();
       frameActivity.applyPrefs();
+    },
+    onTabShown: (panel) => {
+      if (panel === 'friends') {
+        const root = document.getElementById('friendsPanel');
+        if (root) friends.refreshFriendsPanel(root);
+      }
     },
   });
 
@@ -203,7 +239,14 @@ function installFavicon(me) {
   observeFrameHead();
 }
 
-function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar, cycleModel }) {
+function installShortcuts({
+  frame,
+  triggerGemini,
+  toggleResult,
+  toggleBar,
+  cycleModel,
+  toggleFriendMode,
+}) {
   const isTextInput = (el) => {
     if (!el) return false;
     const tag = el.tagName;
@@ -219,13 +262,15 @@ function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar, cycle
     const isH = k === 'h' || code === 'KeyH';
     const isM = k === 'm' || code === 'KeyM';
     const isC = k === 'c' || code === 'KeyC';
-    if (!isG && !isH && !isM && !isC) return;
+    const isF = k === 'f' || code === 'KeyF';
+    if (!isG && !isH && !isM && !isC && !isF) return;
     e.preventDefault();
     e.stopPropagation();
     if (isG) triggerGemini();
     else if (isH) toggleResult();
     else if (isM) toggleBar();
     else if (isC) cycleModel();
+    else if (isF) toggleFriendMode?.();
   };
 
   let lastWheel = 0;

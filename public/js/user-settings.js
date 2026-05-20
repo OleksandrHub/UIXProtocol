@@ -15,7 +15,15 @@ function fileToBase64(file) {
   });
 }
 
-export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppearanceChanged }) {
+export function initSettings({
+  me,
+  cfg,
+  frame,
+  proxyBase,
+  onFilesChanged,
+  onAppearanceChanged,
+  onTabShown,
+}) {
   const modal = document.getElementById('settings');
   const urlInput = document.getElementById('urlInput');
   const keysInput = document.getElementById('keysInput');
@@ -29,6 +37,7 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
       tabs.forEach((t) => t.classList.toggle('is-active', t === tab));
       const target = tab.dataset.tab;
       panels.forEach((p) => { p.hidden = p.dataset.panel !== target; });
+      onTabShown?.(target);
     });
   });
 
