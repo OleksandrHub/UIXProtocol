@@ -124,19 +124,16 @@
   font-style: italic;
 }
 
-// ===== Mode badge =====
+// ===== Friend toggle button (Д) =====
+// Uses the same --screenshot-* CSS vars as the S button via the
+// shared `.gemini-panel button` selector — appearance settings affect both.
+// When friend mode is active we override background / color to make the
+// active state obvious without relying on toasts.
 
-.mode-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 8px;
-  background: #2a6df4;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  border-radius: 10px;
-  vertical-align: middle;
+#friendToggleBtn.is-active {
+  background: #2a6df4 !important;
+  color: #fff !important;
+  box-shadow: 0 0 0 2px rgba(42, 109, 244, 0.25);
 }
 
 // ===== Friend chat modal =====

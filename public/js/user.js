@@ -83,16 +83,18 @@ async function enterAuthed(me, { fromLogin }) {
   const frameActivity = initFrameActivity({ frame });
   gemini.setAfterSolve(() => filesStatus.refresh());
 
-  const modeBadge = document.getElementById('modeBadge');
+  const friendToggleBtn = document.getElementById('friendToggleBtn');
   const screenshotBtnEl = document.getElementById('screenshotBtn');
   const friends = initFriends({
     me,
     geminiResultEl: document.getElementById('geminiResult'),
     onModeChange: (m, helperName) => {
       const isFriend = m === 'friend';
-      if (modeBadge) {
-        modeBadge.hidden = !isFriend;
-        modeBadge.textContent = helperName ? `Друг → ${helperName}` : 'Друг';
+      if (friendToggleBtn) {
+        friendToggleBtn.classList.toggle('is-active', isFriend);
+        friendToggleBtn.title = isFriend
+          ? `Режим друга увімкнено${helperName ? ` → ${helperName}` : ''}. Натисни щоб вимкнути.`
+          : 'Увімкнути режим Друг (Alt+F). Скрін полетить помічнику замість Gemini.';
       }
       if (screenshotBtnEl) {
         screenshotBtnEl.title = isFriend
@@ -103,6 +105,9 @@ async function enterAuthed(me, { fromLogin }) {
     },
     showHint: (text) => showModelToast(text),
   });
+  if (friendToggleBtn) {
+    friendToggleBtn.addEventListener('click', () => friends.toggleMode());
+  }
 
   // S-кнопка / Alt+G / wheel-up: Gemini в normal-режимі, screenshot до друга в friend-режимі.
   const triggerScreenshot = () => {
