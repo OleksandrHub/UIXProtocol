@@ -2,13 +2,16 @@ import { api } from './http.js';
 import {
   APPEARANCE_DEFAULTS,
   applyAppearance,
+  cycleVariant,
   fetchAppearance,
   loadAppearance,
 } from './user-appearance.js';
 import { initGemini } from './user-gemini.js';
 import { initFilesStatus } from './user-files-status.js';
+import { initFrameActivity } from './user-frame-activity.js';
 import { initSettings } from './user-settings.js';
 import { initArchive } from './user-archive.js';
+import { initFriends } from './user-friends.js';
 
 const id = Number(location.pathname.split('/').filter(Boolean)[0]);
 if (!Number.isFinite(id)) location.href = '/';
@@ -78,7 +81,41 @@ async function enterAuthed(me, { fromLogin }) {
   const showModelToast = initModelToast();
   const filesStatus = initFilesStatus();
   filesStatus.refresh();
+  const frameActivity = initFrameActivity({ frame });
   gemini.setAfterSolve(() => filesStatus.refresh());
+
+  const friendToggleBtn = document.getElementById('friendToggleBtn');
+  const screenshotBtnEl = document.getElementById('screenshotBtn');
+  const friends = initFriends({
+    me,
+    geminiResultEl: document.getElementById('geminiResult'),
+    onModeChange: (m, helperName) => {
+      const isFriend = m === 'friend';
+      if (friendToggleBtn) {
+        friendToggleBtn.classList.toggle('is-active', isFriend);
+        friendToggleBtn.title = isFriend
+          ? `Режим друга увімкнено${helperName ? ` → ${helperName}` : ''}. Натисни щоб вимкнути.`
+          : 'Увімкнути режим Друг (Alt+F). Скрін полетить помічнику замість Gemini.';
+      }
+      if (screenshotBtnEl) {
+        screenshotBtnEl.title = isFriend
+          ? `Скріншот → ${helperName ?? 'помічник'}`
+          : 'Скріншот → Gemini';
+      }
+      showModelToast(isFriend ? `режим: ДРУГ (${helperName ?? '?'})` : 'режим: Gemini');
+    },
+    showHint: (text) => showModelToast(text),
+  });
+  if (friendToggleBtn) {
+    friendToggleBtn.addEventListener('click', () => friends.toggleMode());
+  }
+
+  // S-кнопка / Alt+G / wheel-up: Gemini в normal-режимі, screenshot до друга в friend-режимі.
+  const triggerScreenshot = () => {
+    if (friends.getMode() === 'friend') friends.triggerScreenshot();
+    else gemini.triggerGemini();
+  };
+  if (gemini.button) gemini.button.addEventListener('click', triggerScreenshot);
 
   const cycleModel = async () => {
     const enabled = me.enabledModels ?? [];
@@ -104,12 +141,24 @@ async function enterAuthed(me, { fromLogin }) {
     }
   };
 
+  const cycleVariantHotkey = async () => {
+    try {
+      const v = await cycleVariant();
+      if (v) showModelToast(`вигляд: ${v.name}`);
+      else showModelToast('варіантів немає');
+    } catch (e) {
+      showModelToast(`помилка: ${e.message}`);
+    }
+  };
+
   installShortcuts({
     frame,
-    triggerGemini: gemini.triggerGemini,
+    triggerGemini: triggerScreenshot,
     toggleResult: gemini.toggleResult,
     toggleBar,
     cycleModel,
+    toggleFriendMode: friends.toggleMode,
+    cycleVariant: cycleVariantHotkey,
   });
 
   installFavicon(me);
@@ -129,10 +178,19 @@ async function enterAuthed(me, { fromLogin }) {
     frame,
     proxyBase,
     onFilesChanged: () => filesStatus.refresh(),
-    onAppearanceChanged: () => filesStatus.applyPrefs(),
+    onAppearanceChanged: () => {
+      filesStatus.applyPrefs();
+      frameActivity.applyPrefs();
+    },
+    onTabShown: (panel) => {
+      if (panel === 'friends') {
+        const root = document.getElementById('friendsPanel');
+        if (root) friends.refreshFriendsPanel(root);
+      }
+    },
   });
 
-  initArchive();
+  initArchive({ me });
 }
 
 function installFavicon(me) {
@@ -198,7 +256,15 @@ function installFavicon(me) {
   observeFrameHead();
 }
 
-function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar, cycleModel }) {
+function installShortcuts({
+  frame,
+  triggerGemini,
+  toggleResult,
+  toggleBar,
+  cycleModel,
+  toggleFriendMode,
+  cycleVariant,
+}) {
   const isTextInput = (el) => {
     if (!el) return false;
     const tag = el.tagName;
@@ -214,13 +280,17 @@ function installShortcuts({ frame, triggerGemini, toggleResult, toggleBar, cycle
     const isH = k === 'h' || code === 'KeyH';
     const isM = k === 'm' || code === 'KeyM';
     const isC = k === 'c' || code === 'KeyC';
-    if (!isG && !isH && !isM && !isC) return;
+    const isF = k === 'f' || code === 'KeyF';
+    const isR = k === 'r' || code === 'KeyR';
+    if (!isG && !isH && !isM && !isC && !isF && !isR) return;
     e.preventDefault();
     e.stopPropagation();
     if (isG) triggerGemini();
     else if (isH) toggleResult();
     else if (isM) toggleBar();
     else if (isC) cycleModel();
+    else if (isF) toggleFriendMode?.();
+    else if (isR) cycleVariant?.();
   };
 
   let lastWheel = 0;

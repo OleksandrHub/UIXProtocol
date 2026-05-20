@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  addGeminiError,
   addQuestion,
   addUserFile,
   deleteUserFile,
@@ -9,6 +10,7 @@ import {
 } from '../db';
 import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from '../shared/constants';
 import {
+  GeminiSolveError,
   getCachedFileIds,
   invalidateUploadsForUser,
   preloadFiles,
@@ -127,11 +129,15 @@ export async function handleFiles(
 
     const knownSet = new Set<string>(KNOWN_MODELS);
     const enabled = (me.enabledModels ?? []).filter((m) => knownSet.has(m));
-    const ordered =
+    // Use ONLY the active model. Fallback to other models would mask the
+    // selected choice (and burn quota on backups). Multiple API keys are
+    // still tried for that one model so a single rate-limited key doesn't
+    // kill the request.
+    const activeModel =
       me.activeModel && enabled.includes(me.activeModel)
-        ? [me.activeModel, ...enabled.filter((m) => m !== me.activeModel)]
-        : enabled;
-    const models = ordered.length ? ordered : ['gemini-2.5-flash'];
+        ? me.activeModel
+        : (enabled[0] ?? 'gemini-2.5-flash');
+    const models = [activeModel];
 
     const files = getUserFiles(me.id);
 
@@ -163,7 +169,13 @@ export async function handleFiles(
       }
       sendJson(res, 200, { answer: result.answer });
     } catch (e) {
-      sendJson(res, 502, { error: (e as Error).message });
+      const err = e as Error;
+      const model = err instanceof GeminiSolveError ? err.model : (me.activeModel ?? '');
+      const hint = err instanceof GeminiSolveError ? err.apiKeyHint : '';
+      try {
+        addGeminiError(me.id, model, hint, err.message);
+      } catch {}
+      sendJson(res, 502, { error: err.message });
     }
     return true;
   }

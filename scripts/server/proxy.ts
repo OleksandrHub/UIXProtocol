@@ -18,8 +18,156 @@ function rewriteUrls(text: string, targetHost: string): string {
     .replaceAll(`http://${targetHost}`, '');
 }
 
+function forceAbsoluteUrlsThroughProxy(text: string): string {
+  const proxyPrefix = `${PROXY_PREFIX}/`;
+  return text.replace(/https?:\/\/[^\s"'<>`\\)]+/gi, (match, offset, full) => {
+    if (offset >= proxyPrefix.length && full.slice(offset - proxyPrefix.length, offset) === proxyPrefix) {
+      return match;
+    }
+    return `${proxyPrefix}${match}`;
+  });
+}
+
+function rewriteLocationToProxy(value: string): string {
+  if (/^https?:\/\//i.test(value)) return `${PROXY_PREFIX}/${value}`;
+  if (value.startsWith('//')) return `${PROXY_PREFIX}/https:${value}`;
+  return value;
+}
+
+function normalizeIp(ip: string | undefined): string {
+  if (!ip) return '';
+  if (ip.startsWith('::ffff:')) return ip.slice(7);
+  if (ip === '::1') return '127.0.0.1';
+  return ip;
+}
+
+function buildClientForwarding(req: http.IncomingMessage): {
+  xff: string;
+  realIp: string;
+  forwarded: string;
+} {
+  const peer = normalizeIp(req.socket?.remoteAddress);
+  const incoming = req.headers['x-forwarded-for'];
+  const incomingStr =
+    typeof incoming === 'string' ? incoming : Array.isArray(incoming) ? incoming.join(', ') : '';
+  const xff = incomingStr && peer ? `${incomingStr}, ${peer}` : incomingStr || peer;
+  const realIp = (incomingStr ? incomingStr.split(',')[0]!.trim() : peer) || peer;
+  const forwarded = peer ? `for="${peer.includes(':') ? `[${peer}]` : peer}"` : '';
+  return { xff, realIp, forwarded };
+}
+
 const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
+
+const KEEP_ACTIVE_SCRIPT = `<script data-uix-keepactive>(function(){try{
+var W=window,D=document,N=navigator;
+W.__uixKeepActive=true;
+var def=function(o,k,v){try{Object.defineProperty(o,k,{configurable:true,get:function(){return v;}});}catch(e){}};
+
+// Page Visibility API + vendor-prefixed variants
+def(Document.prototype,'hidden',false);
+def(Document.prototype,'webkitHidden',false);
+def(Document.prototype,'mozHidden',false);
+def(Document.prototype,'msHidden',false);
+def(Document.prototype,'visibilityState','visible');
+def(Document.prototype,'webkitVisibilityState','visible');
+def(Document.prototype,'mozVisibilityState','visible');
+def(Document.prototype,'msVisibilityState','visible');
+
+// Page Lifecycle API
+def(Document.prototype,'wasDiscarded',false);
+def(Document.prototype,'prerendering',false);
+try{def(Object.getPrototypeOf(D)||Document.prototype,'visibilityState','visible');}catch(e){}
+
+// Focus
+try{D.hasFocus=function(){return true;};}catch(e){}
+
+// navigator.userActivation — many sites gate features behind it
+try{
+  var fakeUA={hasBeenActive:true,isActive:true};
+  Object.defineProperty(N,'userActivation',{configurable:true,get:function(){return fakeUA;}});
+}catch(e){}
+
+// Always report online
+try{Object.defineProperty(N,'onLine',{configurable:true,get:function(){return true;}});}catch(e){}
+
+// Block events that signal becoming inactive
+var BLOCK={
+  visibilitychange:1,webkitvisibilitychange:1,mozvisibilitychange:1,msvisibilitychange:1,
+  blur:1,pagehide:1,freeze:1,offline:1
+};
+var isTop=function(t){return t===D||t===W||t===W.frameElement;};
+var origAdd=EventTarget.prototype.addEventListener;
+EventTarget.prototype.addEventListener=function(type,listener,options){
+  if(typeof type==='string'&&BLOCK[type.toLowerCase()]&&isTop(this))return;
+  return origAdd.call(this,type,listener,options);
+};
+var origRem=EventTarget.prototype.removeEventListener;
+EventTarget.prototype.removeEventListener=function(type,listener,options){
+  if(typeof type==='string'&&BLOCK[type.toLowerCase()]&&isTop(this))return;
+  return origRem.call(this,type,listener,options);
+};
+var origDispatch=EventTarget.prototype.dispatchEvent;
+EventTarget.prototype.dispatchEvent=function(ev){
+  if(ev&&typeof ev.type==='string'&&BLOCK[ev.type.toLowerCase()]&&isTop(this))return true;
+  return origDispatch.call(this,ev);
+};
+
+// on* event-handler properties
+['onvisibilitychange','onwebkitvisibilitychange','onmozvisibilitychange','onmsvisibilitychange',
+ 'onblur','onpagehide','onfreeze','onoffline'].forEach(function(p){
+  try{Object.defineProperty(D,p,{configurable:true,get:function(){return null;},set:function(){}});}catch(e){}
+  try{Object.defineProperty(W,p,{configurable:true,get:function(){return null;},set:function(){}});}catch(e){}
+});
+
+// Emit "visible" + "focus" once after DOM is ready so sites that subscribed early
+// see the page in an active state.
+var fire=function(){
+  try{var ev=new Event('visibilitychange');origDispatch.call(D,ev);}catch(e){}
+  try{var ev2=new Event('focus');origDispatch.call(W,ev2);}catch(e){}
+  try{var ev3=new Event('pageshow');origDispatch.call(W,ev3);}catch(e){}
+};
+if(D.readyState==='loading')D.addEventListener('DOMContentLoaded',fire,{once:true});
+else setTimeout(fire,0);
+}catch(e){}})();</script>`;
+
+function injectKeepActive(html: string): string {
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b([^>]*)>/i, `<head$1>${KEEP_ACTIVE_SCRIPT}`);
+  }
+  return KEEP_ACTIVE_SCRIPT + html;
+}
+
+const IP_DIAG_SCRIPT = `<script data-uix-ipdiag>(function(){
+var TAG='%c[UIX-IP]',S='color:#2a6df4;font-weight:600';
+console.log(TAG+' === діагностика IP стартує ===',S);
+
+// 1) IP як бачить браузер напряму (реальний IP студента)
+fetch('https://api.ipify.org?format=json').then(function(r){return r.json();}).then(function(d){
+  console.log(TAG+' браузер → зовні (реальний IP клієнта):',S,d.ip);
+}).catch(function(e){console.warn(TAG+' браузер-тест впав:',S,e.message);});
+
+// 2) IP центрального сервера (прямий вихід, повз ноут-relay)
+fetch('/api/_diag/server-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+  console.log(TAG+' центральний сервер → зовні (прямий):',S,d.ip);
+}).catch(function(e){console.warn(TAG+' server-ip впав:',S,e.message);});
+
+// 2b) IP через ноут-relay — це IP який бачить target для проксованого контенту
+fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+  if(d && d.ip){
+    console.log(TAG+' через ноут-relay → зовні (IP який бачить target):',S,d.ip);
+  } else {
+    console.warn(TAG+' relay-ip відповів без IP:',S,d);
+  }
+}).catch(function(e){console.warn(TAG+' relay-ip впав (relay не налаштований чи недоступний):',S,e.message);});
+})();</script>`;
+
+function injectIpDiag(html: string): string {
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b([^>]*)>/i, `<head$1>${IP_DIAG_SCRIPT}`);
+  }
+  return IP_DIAG_SCRIPT + html;
+}
 
 function rewriteViewport(html: string): string {
   const viewportRe = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
@@ -32,11 +180,24 @@ function rewriteViewport(html: string): string {
   return html;
 }
 
+function pickForwardProxy(userId: number | null): URL | null {
+  const list = environment.forwardProxies;
+  if (!list.length || userId == null) return null;
+  const raw = list[Math.abs(userId) % list.length];
+  if (!raw) return null;
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+
 function performProxy(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   targetRaw: string,
   pathOnly: string,
+  userId: number | null,
   opts: ProxyOpts = {}
 ): void {
   const TARGET = /^https?:\/\//i.test(targetRaw) ? targetRaw : `https://${targetRaw}`;
@@ -70,6 +231,7 @@ function performProxy(
     cleanedCookie = filtered || undefined;
   }
 
+  const fwd = buildClientForwarding(req);
   const incomingHeaders: http.OutgoingHttpHeaders = {
     ...req.headers,
     host: targetHost,
@@ -81,16 +243,46 @@ function performProxy(
   if (cleanedCookie) incomingHeaders['cookie'] = cleanedCookie;
   else delete incomingHeaders['cookie'];
   delete incomingHeaders['accept-encoding'];
+  if (fwd.xff) incomingHeaders['x-forwarded-for'] = fwd.xff;
+  if (fwd.realIp) incomingHeaders['x-real-ip'] = fwd.realIp;
+  if (fwd.forwarded) incomingHeaders['forwarded'] = fwd.forwarded;
+  incomingHeaders['x-forwarded-proto'] = 'https';
+  incomingHeaders['x-forwarded-host'] = targetHost;
 
-  const isHttps = TARGET.startsWith('https:');
-  const lib = isHttps ? https : http;
-  const port = isHttps ? 443 : 80;
+  const fwdProxy = pickForwardProxy(userId);
+  let outboundHostname: string;
+  let outboundPort: number;
+  let outboundPath: string;
+  let outboundLib: typeof http | typeof https;
+  if (fwdProxy) {
+    outboundHostname = fwdProxy.hostname;
+    outboundPort = Number(fwdProxy.port) || (fwdProxy.protocol === 'https:' ? 443 : 80);
+    outboundPath = (fwdProxy.pathname === '/' ? '' : fwdProxy.pathname) + (fwdProxy.search ?? '');
+    if (!outboundPath) outboundPath = '/';
+    outboundLib = fwdProxy.protocol === 'https:' ? https : http;
+    incomingHeaders.host = fwdProxy.host;
+ 
+    delete incomingHeaders['x-forwarded-for'];
+    delete incomingHeaders['x-real-ip'];
+    delete incomingHeaders['forwarded'];
+    delete incomingHeaders['x-forwarded-proto'];
+    delete incomingHeaders['x-forwarded-host'];
+    incomingHeaders['x-relay-url'] = targetUrl.href;
+    if (environment.forwardProxySecret) {
+      incomingHeaders['x-relay-secret'] = environment.forwardProxySecret;
+    }
+  } else {
+    outboundHostname = targetUrl.hostname;
+    outboundPort = TARGET.startsWith('https:') ? 443 : 80;
+    outboundPath = targetUrl.pathname + targetUrl.search;
+    outboundLib = TARGET.startsWith('https:') ? https : http;
+  }
 
-  const proxyReq = lib.request(
+  const proxyReq = outboundLib.request(
     {
-      hostname: targetUrl.hostname,
-      port,
-      path: targetUrl.pathname + targetUrl.search,
+      hostname: outboundHostname,
+      port: outboundPort,
+      path: outboundPath,
       method: req.method,
       headers: incomingHeaders,
     },
@@ -98,7 +290,8 @@ function performProxy(
       const headers: http.OutgoingHttpHeaders = { ...proxyRes.headers };
 
       if (headers['location']) {
-        headers['location'] = rewriteUrls(String(headers['location']), targetHost);
+        const rewritten = rewriteUrls(String(headers['location']), targetHost);
+        headers['location'] = rewriteLocationToProxy(rewritten);
       }
       if (opts.stripSetCookie) {
         delete headers['set-cookie'];
@@ -138,7 +331,12 @@ function performProxy(
         proxyRes.on('data', (c: Buffer) => chunks.push(c));
         proxyRes.on('end', () => {
           let text = rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
-          if (ct.includes('text/html')) text = rewriteViewport(text);
+          text = forceAbsoluteUrlsThroughProxy(text);
+          if (ct.includes('text/html')) {
+            text = injectKeepActive(text);
+            text = injectIpDiag(text);
+            text = rewriteViewport(text);
+          }
           const body = Buffer.from(text, 'utf-8');
           headers['content-length'] = body.length;
           res.writeHead(proxyRes.statusCode ?? 502, headers);
@@ -179,7 +377,7 @@ export function proxyForUser(
     res.end('No target URL set for this user');
     return;
   }
-  performProxy(req, res, target, reqPath, preview ? { setPreviewCookie: userId } : {});
+  performProxy(req, res, target, reqPath, userId, preview ? { setPreviewCookie: userId } : {});
 }
 
 function getCookiePreviewId(req: http.IncomingMessage): number | null {

@@ -1,0 +1,20 @@
+<div class="modal" id="friendChat" hidden>
+  <div class="modal__card modal__card--wide">
+    <div class="friend-chat__header">
+      <h2>Допомога другу</h2>
+      <span id="friendChatFrom" class="friend-chat__from"></span>
+      <button type="button" id="friendChatClose" class="friend-chat__close" aria-label="Закрити">×</button>
+    </div>
+    <div class="friend-chat__image-wrap">
+      <img id="friendChatImg" class="friend-chat__image" alt="скріншот" />
+    </div>
+    <label class="friend-chat__reply">
+      Відповідь
+      <textarea id="friendChatReply" rows="3" placeholder="напишіть відповідь… (Ctrl+Enter — надіслати)"></textarea>
+    </label>
+    <div class="friend-chat__status" id="friendChatStatus"></div>
+    <div class="modal__actions">
+      <button type="button" id="friendChatSend">Надіслати</button>
+    </div>
+  </div>
+</div>

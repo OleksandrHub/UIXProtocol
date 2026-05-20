@@ -1,9 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  clearGeminiErrors,
   createUser,
+  deleteGeminiError,
   deleteUser,
   getUserById,
+  listGeminiErrors,
   listUsers,
   updateUser,
 } from '../db';
@@ -62,6 +65,27 @@ export async function handleAdminUsers(
       if (msg.includes('UNIQUE')) sendJson(res, 409, { error: 'name already taken' });
       else sendJson(res, 500, { error: msg });
     }
+    return true;
+  }
+
+  if (path === '/api/admin/gemini-errors' && method === 'GET') {
+    if (!requireAdmin(req, res)) return true;
+    sendJson(res, 200, listGeminiErrors(500));
+    return true;
+  }
+
+  if (path === '/api/admin/gemini-errors' && method === 'DELETE') {
+    if (!requireAdmin(req, res)) return true;
+    const removed = clearGeminiErrors();
+    sendJson(res, 200, { removed });
+    return true;
+  }
+
+  const errIdMatch = path.match(/^\/api\/admin\/gemini-errors\/(\d+)$/);
+  if (errIdMatch && method === 'DELETE') {
+    if (!requireAdmin(req, res)) return true;
+    if (deleteGeminiError(Number(errIdMatch[1]))) sendNoContent(res);
+    else sendJson(res, 404, { error: 'not found' });
     return true;
   }
 

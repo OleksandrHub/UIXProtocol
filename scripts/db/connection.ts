@@ -77,3 +77,31 @@ const questionCols = db
 if (!questionCols.some((c) => c.name === 'tags')) {
   db.exec("ALTER TABLE user_questions ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS friend_connections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asker_id INTEGER NOT NULL,
+    helper_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (asker_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (helper_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (asker_id, helper_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_friends_asker ON friend_connections(asker_id);
+  CREATE INDEX IF NOT EXISTS idx_friends_helper ON friend_connections(helper_id);
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS gemini_errors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    api_key_hint TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_gemini_errors_created ON gemini_errors(created_at DESC);
+`);

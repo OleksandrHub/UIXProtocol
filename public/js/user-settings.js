@@ -1,9 +1,16 @@
 import { api } from './http.js';
 import {
   APPEARANCE_DEFAULTS,
+  addVariant,
   applyAppearance,
+  deleteVariant,
+  getActiveVariantId,
+  getVariants,
   loadAppearance,
+  renameVariant,
   saveAppearance,
+  setActiveVariant,
+  updateActiveVariantSettings,
 } from './user-appearance.js';
 
 function fileToBase64(file) {
@@ -15,7 +22,15 @@ function fileToBase64(file) {
   });
 }
 
-export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppearanceChanged }) {
+export function initSettings({
+  me,
+  cfg,
+  frame,
+  proxyBase,
+  onFilesChanged,
+  onAppearanceChanged,
+  onTabShown,
+}) {
   const modal = document.getElementById('settings');
   const urlInput = document.getElementById('urlInput');
   const keysInput = document.getElementById('keysInput');
@@ -29,6 +44,7 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
       tabs.forEach((t) => t.classList.toggle('is-active', t === tab));
       const target = tab.dataset.tab;
       panels.forEach((p) => { p.hidden = p.dataset.panel !== target; });
+      onTabShown?.(target);
     });
   });
 
@@ -187,14 +203,21 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     btnColorOpacity: document.getElementById('apBtnColorOpacity'),
     btnBg: document.getElementById('apBtnBg'),
     btnBgOpacity: document.getElementById('apBtnBgOpacity'),
+    friendActiveColor: document.getElementById('apFriendActiveColor'),
+    friendActiveColorOpacity: document.getElementById('apFriendActiveColorOpacity'),
+    friendActiveBg: document.getElementById('apFriendActiveBg'),
+    friendActiveBgOpacity: document.getElementById('apFriendActiveBgOpacity'),
     showFilesStatus: document.getElementById('apShowFilesStatus'),
     showModelToast: document.getElementById('apShowModelToast'),
+    showFrameActivity: document.getElementById('apShowFrameActivity'),
   };
   const apOut = {
     resultColorOpacity: document.getElementById('apResultColorOpacityOut'),
     resultBgOpacity: document.getElementById('apResultBgOpacityOut'),
     btnColorOpacity: document.getElementById('apBtnColorOpacityOut'),
     btnBgOpacity: document.getElementById('apBtnBgOpacityOut'),
+    friendActiveColorOpacity: document.getElementById('apFriendActiveColorOpacityOut'),
+    friendActiveBgOpacity: document.getElementById('apFriendActiveBgOpacityOut'),
   };
 
   const updateOpacityLabels = () => {
@@ -202,6 +225,8 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     apOut.resultBgOpacity.textContent = `${ap.resultBgOpacity.value}%`;
     apOut.btnColorOpacity.textContent = `${ap.btnColorOpacity.value}%`;
     apOut.btnBgOpacity.textContent = `${ap.btnBgOpacity.value}%`;
+    apOut.friendActiveColorOpacity.textContent = `${ap.friendActiveColorOpacity.value}%`;
+    apOut.friendActiveBgOpacity.textContent = `${ap.friendActiveBgOpacity.value}%`;
   };
 
   const populateAppearance = (a) => {
@@ -217,10 +242,90 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     ap.btnColorOpacity.value = a.btnColorOpacity ?? 100;
     ap.btnBg.value = a.btnBg || '#ffffff';
     ap.btnBgOpacity.value = a.btnBgOpacity ?? 0;
+    ap.friendActiveColor.value = a.friendActiveColor || '#ffffff';
+    ap.friendActiveColorOpacity.value = a.friendActiveColorOpacity ?? 100;
+    ap.friendActiveBg.value = a.friendActiveBg || '#2a6df4';
+    ap.friendActiveBgOpacity.value = a.friendActiveBgOpacity ?? 100;
     ap.showFilesStatus.checked = a.showFilesStatus === true;
     ap.showModelToast.checked = a.showModelToast === true;
+    ap.showFrameActivity.checked = a.showFrameActivity === true;
     updateOpacityLabels();
+    renderVariantSelect();
   };
+
+  // ---- Variants UI ----
+  const variantSelect = document.getElementById('variantSelect');
+  const variantAddBtn = document.getElementById('variantAdd');
+  const variantRenameBtn = document.getElementById('variantRename');
+  const variantDeleteBtn = document.getElementById('variantDelete');
+
+  const renderVariantSelect = () => {
+    if (!variantSelect) return;
+    const variants = getVariants();
+    const activeId = getActiveVariantId();
+    variantSelect.innerHTML = '';
+    variants.forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.name;
+      if (v.id === activeId) opt.selected = true;
+      variantSelect.appendChild(opt);
+    });
+    if (variantDeleteBtn) variantDeleteBtn.disabled = variants.length <= 1;
+  };
+
+  if (variantSelect) {
+    variantSelect.addEventListener('change', async () => {
+      try {
+        await setActiveVariant(variantSelect.value);
+        populateAppearance(loadAppearance());
+      } catch (e) {
+        settingsError.textContent = e.message;
+      }
+    });
+  }
+  if (variantAddBtn) {
+    variantAddBtn.addEventListener('click', async () => {
+      try {
+        const v = await addVariant('Новий варіант');
+        await setActiveVariant(v.id);
+        populateAppearance(loadAppearance());
+      } catch (e) {
+        settingsError.textContent = e.message;
+      }
+    });
+  }
+  if (variantRenameBtn) {
+    variantRenameBtn.addEventListener('click', async () => {
+      const id = getActiveVariantId();
+      const current = getVariants().find((v) => v.id === id);
+      if (!current) return;
+      const name = prompt('Нова назва варіанту:', current.name);
+      if (name == null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      try {
+        await renameVariant(id, trimmed);
+        renderVariantSelect();
+      } catch (e) {
+        settingsError.textContent = e.message;
+      }
+    });
+  }
+  if (variantDeleteBtn) {
+    variantDeleteBtn.addEventListener('click', async () => {
+      const id = getActiveVariantId();
+      const current = getVariants().find((v) => v.id === id);
+      if (!current) return;
+      if (!confirm(`Видалити варіант "${current.name}"?`)) return;
+      try {
+        await deleteVariant(id);
+        populateAppearance(loadAppearance());
+      } catch (e) {
+        settingsError.textContent = e.message;
+      }
+    });
+  }
 
   const collectAppearance = () => ({
     resultFont: ap.resultFont.value.trim(),
@@ -235,15 +340,41 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     btnColorOpacity: Number(ap.btnColorOpacity.value),
     btnBg: ap.btnBg.value,
     btnBgOpacity: Number(ap.btnBgOpacity.value),
+    friendActiveColor: ap.friendActiveColor.value,
+    friendActiveColorOpacity: Number(ap.friendActiveColorOpacity.value),
+    friendActiveBg: ap.friendActiveBg.value,
+    friendActiveBgOpacity: Number(ap.friendActiveBgOpacity.value),
     showFilesStatus: ap.showFilesStatus.checked,
     showModelToast: ap.showModelToast.checked,
+    showFrameActivity: ap.showFrameActivity.checked,
   });
+
+  const RESULT_KEYS = new Set([
+    'resultFont',
+    'resultSize',
+    'resultColor',
+    'resultColorOpacity',
+    'resultBg',
+    'resultBgOpacity',
+  ]);
 
   Object.entries(ap).forEach(([key, el]) => {
     const handler = async () => {
       updateOpacityLabels();
+      // Result-* edits write into the active variant so it's the variant
+      // that survives, not just the flat snapshot.
+      if (RESULT_KEYS.has(key)) {
+        const collected = collectAppearance();
+        const variantPartial = {};
+        for (const k of RESULT_KEYS) variantPartial[k] = collected[k];
+        updateActiveVariantSettings(variantPartial);
+      }
       applyAppearance(collectAppearance());
-      if (key === 'showFilesStatus' || key === 'showModelToast') {
+      if (
+        key === 'showFilesStatus' ||
+        key === 'showModelToast' ||
+        key === 'showFrameActivity'
+      ) {
         try {
           await saveAppearance({ [key]: el.checked });
           onAppearanceChanged?.();
