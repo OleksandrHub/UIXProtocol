@@ -135,35 +135,5 @@ export async function handleDiag(
     return true;
   }
 
-  if (path === '/api/_diag/spoof-test' && method === 'GET') {
-    const fakeIp = '8.8.8.8';
-    try {
-      const [plain, spoofed] = await Promise.all([
-        probe(),
-        probe({
-          'X-Forwarded-For': fakeIp,
-          'X-Real-IP': fakeIp,
-          'CF-Connecting-IP': fakeIp,
-          'True-Client-IP': fakeIp,
-          Forwarded: `for=${fakeIp}`,
-        }),
-      ]);
-      sendJson(res, 200, {
-        target: IP_PROBE,
-        fakeIp,
-        without: plain.ip,
-        withSpoof: spoofed.ip,
-        spoofWorked: spoofed.ip === fakeIp,
-        note:
-          spoofed.ip === fakeIp
-            ? 'target ДОВІРЯЄ X-Forwarded-For — IP можна підмінити хедером'
-            : 'target ІГНОРУЄ X-Forwarded-For — бачить тільки TCP source IP (наш сервер)',
-      });
-    } catch (e) {
-      sendJson(res, 502, { error: (e as Error).message });
-    }
-    return true;
-  }
-
   return false;
 }

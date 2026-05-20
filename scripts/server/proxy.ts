@@ -160,21 +160,6 @@ fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return
     console.warn(TAG+' relay-ip відповів без IP:',S,d);
   }
 }).catch(function(e){console.warn(TAG+' relay-ip впав (relay не налаштований чи недоступний):',S,e.message);});
-
-// 3) Через 5 сек — спроба підміни через X-Forwarded-For
-setTimeout(function(){
-  console.log(TAG+' === спроба підміни через X-* хедери (fake=8.8.8.8) ===',S);
-  fetch('/api/_diag/spoof-test',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
-    console.log(TAG+' без підміни:',S,d.without);
-    console.log(TAG+' з підміною:',S,d.withSpoof,'(запитано:',d.fakeIp,')');
-    if(d.spoofWorked){
-      console.warn(TAG+' ⚠ target ДОВІРЯЄ X-Forwarded-For — IP можна підмінити хедером',S);
-    }else{
-      console.log(TAG+' ✓ target ІГНОРУЄ X-Forwarded-For — бачить тільки TCP source IP',S);
-    }
-    console.log(TAG+' примітка:',S,d.note);
-  }).catch(function(e){console.warn(TAG+' spoof-test впав:',S,e.message);});
-},5000);
 })();</script>`;
 
 function injectIpDiag(html: string): string {
