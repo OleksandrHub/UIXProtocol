@@ -1,7 +1,7 @@
 import * as https from 'node:https';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { requireAuth, sendJson } from '../api/helpers';
+import { sendJson } from '../api/helpers';
 
 const IP_PROBE = 'https://api.ipify.org?format=json';
 let cachedServerIp: { ip: string; at: number } | null = null;
@@ -47,13 +47,12 @@ async function fetchServerIp(): Promise<string> {
 }
 
 export async function handleDiag(
-  req: IncomingMessage,
+  _req: IncomingMessage,
   res: ServerResponse,
   path: string,
   method: string,
 ): Promise<boolean> {
   if (path === '/api/_diag/server-ip' && method === 'GET') {
-    if (!requireAuth(req, res)) return true;
     try {
       const ip = await fetchServerIp();
       sendJson(res, 200, { ip, probe: IP_PROBE });
@@ -64,7 +63,6 @@ export async function handleDiag(
   }
 
   if (path === '/api/_diag/spoof-test' && method === 'GET') {
-    if (!requireAuth(req, res)) return true;
     const fakeIp = '8.8.8.8';
     try {
       const [plain, spoofed] = await Promise.all([
