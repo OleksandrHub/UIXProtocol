@@ -7,7 +7,7 @@
     type="button"
     id="frameActivityBtn"
     class="files-status__btn"
-    title="Активність iframe — клік дає фокус"
+    title="Активність iframe — клік розгортає деталі"
   >
     <span class="files-status__icon" id="frameActivityIcon">◌</span>
     <span class="files-status__text" id="frameActivityText">—</span>
@@ -20,6 +20,9 @@
   >
     ×
   </button>
+  <div class="frame-activity__panel" id="frameActivityPanel" hidden>
+    <table id="frameActivityTable"></table>
+  </div>
 </div>
 
 <div class="files-status" id="filesStatus" hidden>

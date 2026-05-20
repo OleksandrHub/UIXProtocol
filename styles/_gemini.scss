@@ -56,6 +56,62 @@
 
 .frame-activity {
   top: 5.5rem !important;
+  flex-wrap: wrap;
+
+  &__panel {
+    flex: 1 0 100%;
+    margin-top: .3rem;
+    max-width: 360px;
+    max-height: 60vh;
+    overflow: auto;
+    background: rgba(255, 255, 255, .96);
+    border: 1px solid rgba(0, 0, 0, .1);
+    border-radius: 8px;
+    padding: .35rem .45rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .08);
+    font-size: .7rem;
+    color: #2a2a30;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+
+    &[hidden] {
+      display: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+
+    th {
+      text-align: left;
+      font-size: .68rem;
+      font-weight: 700;
+      color: #6b6b73;
+      padding: .35rem .25rem .15rem;
+      border-bottom: 1px solid rgba(0, 0, 0, .07);
+    }
+
+    td {
+      padding: .14rem .25rem;
+      vertical-align: top;
+      word-break: break-all;
+    }
+
+    td:first-child {
+      color: #6b6b73;
+      font-family: ui-monospace, monospace;
+      font-size: .68rem;
+      white-space: nowrap;
+    }
+
+    td:last-child {
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+      font-weight: 600;
+    }
+  }
 }
 
 .files-status {
