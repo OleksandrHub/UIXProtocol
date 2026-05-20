@@ -18,6 +18,28 @@ function rewriteUrls(text: string, targetHost: string): string {
     .replaceAll(`http://${targetHost}`, '');
 }
 
+function normalizeIp(ip: string | undefined): string {
+  if (!ip) return '';
+  if (ip.startsWith('::ffff:')) return ip.slice(7);
+  if (ip === '::1') return '127.0.0.1';
+  return ip;
+}
+
+function buildClientForwarding(req: http.IncomingMessage): {
+  xff: string;
+  realIp: string;
+  forwarded: string;
+} {
+  const peer = normalizeIp(req.socket?.remoteAddress);
+  const incoming = req.headers['x-forwarded-for'];
+  const incomingStr =
+    typeof incoming === 'string' ? incoming : Array.isArray(incoming) ? incoming.join(', ') : '';
+  const xff = incomingStr && peer ? `${incomingStr}, ${peer}` : incomingStr || peer;
+  const realIp = (incomingStr ? incomingStr.split(',')[0]!.trim() : peer) || peer;
+  const forwarded = peer ? `for="${peer.includes(':') ? `[${peer}]` : peer}"` : '';
+  return { xff, realIp, forwarded };
+}
+
 const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
 
@@ -100,6 +122,43 @@ function injectKeepActive(html: string): string {
   return KEEP_ACTIVE_SCRIPT + html;
 }
 
+const IP_DIAG_SCRIPT = `<script data-uix-ipdiag>(function(){
+var TAG='%c[UIX-IP]',S='color:#2a6df4;font-weight:600';
+console.log(TAG+' === діагностика IP стартує ===',S);
+
+// 1) IP як бачить браузер напряму (реальний IP студента)
+fetch('https://api.ipify.org?format=json').then(function(r){return r.json();}).then(function(d){
+  console.log(TAG+' браузер → зовні (реальний IP клієнта):',S,d.ip);
+}).catch(function(e){console.warn(TAG+' браузер-тест впав:',S,e.message);});
+
+// 2) IP нашого proxy-сервера (як бачить target)
+fetch('/api/_diag/server-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+  console.log(TAG+' сервер → зовні (IP який бачить target):',S,d.ip);
+}).catch(function(e){console.warn(TAG+' server-ip впав:',S,e.message);});
+
+// 3) Через 5 сек — спроба підміни через X-Forwarded-For
+setTimeout(function(){
+  console.log(TAG+' === спроба підміни через X-* хедери (fake=8.8.8.8) ===',S);
+  fetch('/api/_diag/spoof-test',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+    console.log(TAG+' без підміни:',S,d.without);
+    console.log(TAG+' з підміною:',S,d.withSpoof,'(запитано:',d.fakeIp,')');
+    if(d.spoofWorked){
+      console.warn(TAG+' ⚠ target ДОВІРЯЄ X-Forwarded-For — IP можна підмінити хедером',S);
+    }else{
+      console.log(TAG+' ✓ target ІГНОРУЄ X-Forwarded-For — бачить тільки TCP source IP',S);
+    }
+    console.log(TAG+' примітка:',S,d.note);
+  }).catch(function(e){console.warn(TAG+' spoof-test впав:',S,e.message);});
+},5000);
+})();</script>`;
+
+function injectIpDiag(html: string): string {
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b([^>]*)>/i, `<head$1>${IP_DIAG_SCRIPT}`);
+  }
+  return IP_DIAG_SCRIPT + html;
+}
+
 function rewriteViewport(html: string): string {
   const viewportRe = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
   if (viewportRe.test(html)) {
@@ -149,6 +208,7 @@ function performProxy(
     cleanedCookie = filtered || undefined;
   }
 
+  const fwd = buildClientForwarding(req);
   const incomingHeaders: http.OutgoingHttpHeaders = {
     ...req.headers,
     host: targetHost,
@@ -160,6 +220,11 @@ function performProxy(
   if (cleanedCookie) incomingHeaders['cookie'] = cleanedCookie;
   else delete incomingHeaders['cookie'];
   delete incomingHeaders['accept-encoding'];
+  if (fwd.xff) incomingHeaders['x-forwarded-for'] = fwd.xff;
+  if (fwd.realIp) incomingHeaders['x-real-ip'] = fwd.realIp;
+  if (fwd.forwarded) incomingHeaders['forwarded'] = fwd.forwarded;
+  incomingHeaders['x-forwarded-proto'] = 'https';
+  incomingHeaders['x-forwarded-host'] = targetHost;
 
   const isHttps = TARGET.startsWith('https:');
   const lib = isHttps ? https : http;
@@ -219,6 +284,7 @@ function performProxy(
           let text = rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
           if (ct.includes('text/html')) {
             text = injectKeepActive(text);
+            text = injectIpDiag(text);
             text = rewriteViewport(text);
           }
           const body = Buffer.from(text, 'utf-8');
