@@ -21,6 +21,39 @@ function rewriteUrls(text: string, targetHost: string): string {
 const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
 
+// const KEEP_ACTIVE_SCRIPT = `<script>(function(){try{
+// var W=window,D=document;
+// var def=function(o,k,v){try{Object.defineProperty(o,k,{configurable:true,get:function(){return v;}});}catch(e){}};
+// def(Document.prototype,'hidden',false);
+// def(Document.prototype,'webkitHidden',false);
+// def(Document.prototype,'visibilityState','visible');
+// def(Document.prototype,'webkitVisibilityState','visible');
+// try{D.hasFocus=function(){return true;};}catch(e){}
+// var BLOCK={visibilitychange:1,webkitvisibilitychange:1,mozvisibilitychange:1,msvisibilitychange:1,blur:1,pagehide:1,freeze:1};
+// var isTop=function(t){return t===D||t===W;};
+// var origAdd=EventTarget.prototype.addEventListener;
+// EventTarget.prototype.addEventListener=function(type,listener,options){
+//   if(typeof type==='string'&&BLOCK[type.toLowerCase()]&&isTop(this))return;
+//   return origAdd.call(this,type,listener,options);
+// };
+// var origDispatch=EventTarget.prototype.dispatchEvent;
+// EventTarget.prototype.dispatchEvent=function(ev){
+//   if(ev&&typeof ev.type==='string'&&BLOCK[ev.type.toLowerCase()]&&isTop(this))return true;
+//   return origDispatch.call(this,ev);
+// };
+// ['onvisibilitychange','onwebkitvisibilitychange','onblur','onpagehide','onfreeze'].forEach(function(p){
+//   try{Object.defineProperty(D,p,{configurable:true,get:function(){return null;},set:function(){}});}catch(e){}
+//   try{Object.defineProperty(W,p,{configurable:true,get:function(){return null;},set:function(){}});}catch(e){}
+// });
+// }catch(e){}})();</script>`;
+
+// function injectKeepActive(html: string): string {
+//   if (/<head\b[^>]*>/i.test(html)) {
+//     return html.replace(/<head\b([^>]*)>/i, `<head$1>${KEEP_ACTIVE_SCRIPT}`);
+//   }
+//   return KEEP_ACTIVE_SCRIPT + html;
+// }
+
 function rewriteViewport(html: string): string {
   const viewportRe = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
   if (viewportRe.test(html)) {
@@ -138,7 +171,10 @@ function performProxy(
         proxyRes.on('data', (c: Buffer) => chunks.push(c));
         proxyRes.on('end', () => {
           let text = rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
-          if (ct.includes('text/html')) text = rewriteViewport(text);
+          // if (ct.includes('text/html')) {
+          //   text = injectKeepActive(text);
+          //   text = rewriteViewport(text);
+          // }
           const body = Buffer.from(text, 'utf-8');
           headers['content-length'] = body.length;
           res.writeHead(proxyRes.statusCode ?? 502, headers);

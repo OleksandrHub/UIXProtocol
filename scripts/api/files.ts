@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
+  addGeminiError,
   addQuestion,
   addUserFile,
   deleteUserFile,
@@ -9,6 +10,7 @@ import {
 } from '../db';
 import { DEFAULT_PROMPT_TEXT, KNOWN_MODELS } from '../shared/constants';
 import {
+  GeminiSolveError,
   getCachedFileIds,
   invalidateUploadsForUser,
   preloadFiles,
@@ -163,7 +165,13 @@ export async function handleFiles(
       }
       sendJson(res, 200, { answer: result.answer });
     } catch (e) {
-      sendJson(res, 502, { error: (e as Error).message });
+      const err = e as Error;
+      const model = err instanceof GeminiSolveError ? err.model : (me.activeModel ?? '');
+      const hint = err instanceof GeminiSolveError ? err.apiKeyHint : '';
+      try {
+        addGeminiError(me.id, model, hint, err.message);
+      } catch {}
+      sendJson(res, 502, { error: err.message });
     }
     return true;
   }

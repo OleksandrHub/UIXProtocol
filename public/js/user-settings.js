@@ -189,6 +189,7 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     btnBgOpacity: document.getElementById('apBtnBgOpacity'),
     showFilesStatus: document.getElementById('apShowFilesStatus'),
     showModelToast: document.getElementById('apShowModelToast'),
+    showFrameActivity: document.getElementById('apShowFrameActivity'),
   };
   const apOut = {
     resultColorOpacity: document.getElementById('apResultColorOpacityOut'),
@@ -219,6 +220,7 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     ap.btnBgOpacity.value = a.btnBgOpacity ?? 0;
     ap.showFilesStatus.checked = a.showFilesStatus === true;
     ap.showModelToast.checked = a.showModelToast === true;
+    ap.showFrameActivity.checked = a.showFrameActivity === true;
     updateOpacityLabels();
   };
 
@@ -237,13 +239,18 @@ export function initSettings({ me, cfg, frame, proxyBase, onFilesChanged, onAppe
     btnBgOpacity: Number(ap.btnBgOpacity.value),
     showFilesStatus: ap.showFilesStatus.checked,
     showModelToast: ap.showModelToast.checked,
+    showFrameActivity: ap.showFrameActivity.checked,
   });
 
   Object.entries(ap).forEach(([key, el]) => {
     const handler = async () => {
       updateOpacityLabels();
       applyAppearance(collectAppearance());
-      if (key === 'showFilesStatus' || key === 'showModelToast') {
+      if (
+        key === 'showFilesStatus' ||
+        key === 'showModelToast' ||
+        key === 'showFrameActivity'
+      ) {
         try {
           await saveAppearance({ [key]: el.checked });
           onAppearanceChanged?.();

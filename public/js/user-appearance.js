@@ -15,6 +15,7 @@ export const APPEARANCE_DEFAULTS = {
   btnBgOpacity: 0,
   showFilesStatus: false,
   showModelToast: false,
+  showFrameActivity: false,
 };
 
 let cache = { ...APPEARANCE_DEFAULTS };

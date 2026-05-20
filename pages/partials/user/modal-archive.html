@@ -1,66 +1,78 @@
 <div class="modal" id="archive" hidden>
   <div class="modal__card modal__card--archive">
     <div class="archive-main">
-      <h2>Архів питань</h2>
+      <h2>Архів</h2>
 
-      <div class="archive-toolbar">
-        <label class="check archive-selall">
-          <input type="checkbox" id="archiveSelectAll" /> Обрати всі
-        </label>
-        <span class="archive-selcount" id="archiveSelCount">обрано: 0</span>
-        <button type="button" class="btn-secondary" id="archiveAddBtn">
-          + Додати питання
+      <nav class="tabs archive-tabs" id="archiveTabs">
+        <button type="button" class="tab is-active" data-arctab="questions">Питання</button>
+        <button type="button" class="tab" data-arctab="errors" id="archiveErrorsTab" hidden>
+          Помилки Gemini
         </button>
-        <button type="button" class="btn-secondary" id="archiveDeleteSel">
-          Видалити обрані
-        </button>
-        <span class="archive-toolbar__spacer"></span>
-        <input
-          type="search"
-          id="archiveSearch"
-          class="archive-search"
-          placeholder="Пошук у питаннях…"
-          autocomplete="off"
-        />
-        <label class="archive-pagesize"
-          >Тег
-          <select id="archiveTagFilter">
-            <option value="">усі</option>
-          </select>
-        </label>
-        <label class="archive-pagesize"
-          >На сторінці
-          <select id="archivePageSize">
-            <option value="5">5</option>
-            <option value="10" selected>10</option>
-            <option value="15">15</option>
-          </select>
-        </label>
-        <button type="button" class="btn-secondary" id="archiveExportTxt">Експорт TXT</button>
-        <button type="button" class="btn-secondary" id="archiveExportPdf">Експорт PDF</button>
+      </nav>
+
+      <div class="archive-panel" data-arcpanel="questions">
+        <div class="archive-toolbar">
+          <label class="check archive-selall">
+            <input type="checkbox" id="archiveSelectAll" /> Обрати всі
+          </label>
+          <span class="archive-selcount" id="archiveSelCount">обрано: 0</span>
+          <button type="button" class="btn-secondary" id="archiveAddBtn">
+            + Додати питання
+          </button>
+          <span class="archive-toolbar__spacer"></span>
+          <label class="archive-pagesize"
+            >Тег
+            <select id="archiveTagFilter">
+              <option value="">усі</option>
+            </select>
+          </label>
+          <label class="archive-pagesize"
+            >На сторінці
+            <select id="archivePageSize">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="15">15</option>
+            </select>
+          </label>
+          <button type="button" class="btn-secondary" id="archiveExportTxt">Експорт TXT</button>
+          <button type="button" class="btn-secondary" id="archiveExportPdf">Експорт PDF</button>
+        </div>
+
+        <div class="archive-share">
+          <input
+            type="text"
+            id="archiveShareUser"
+            list="archiveUsersDatalist"
+            placeholder="Імʼя користувача для поширення"
+            autocomplete="off"
+          />
+          <datalist id="archiveUsersDatalist"></datalist>
+          <button type="button" class="btn-secondary" id="archiveShareBtn">
+            Поділитися обраним
+          </button>
+        </div>
+
+        <div class="archive-list" id="archiveList"></div>
+        <div class="archive-empty" id="archiveEmpty" hidden>Архів порожній.</div>
+
+        <div class="archive-pager" id="archivePager" hidden>
+          <button type="button" class="btn-secondary" id="archivePrev">← Назад</button>
+          <span class="archive-pager__info" id="archivePagerInfo">1 / 1</span>
+          <button type="button" class="btn-secondary" id="archiveNext">Далі →</button>
+        </div>
       </div>
 
-      <div class="archive-share">
-        <input
-          type="text"
-          id="archiveShareUser"
-          list="archiveUsersDatalist"
-          placeholder="Імʼя користувача для поширення"
-          autocomplete="off"
-        />
-        <datalist id="archiveUsersDatalist"></datalist>
-        <button type="button" class="btn-secondary" id="archiveShareBtn">
-          Поділитися обраним
-        </button>
-      </div>
+      <div class="archive-panel" data-arcpanel="errors" hidden>
+        <div class="archive-toolbar">
+          <button type="button" class="btn-secondary" id="errorsRefreshBtn">Оновити</button>
+          <button type="button" class="btn-secondary" id="errorsClearBtn">
+            Очистити всі
+          </button>
+          <span class="archive-selcount" id="errorsCount">0 записів</span>
+        </div>
 
-      <div class="archive-list" id="archiveList"></div>
-      <div class="archive-empty" id="archiveEmpty" hidden>Архів порожній.</div>
-
-      <div class="archive-pager" id="archivePager" hidden>
-        <button type="button" class="btn-secondary" id="archivePrev">← Назад</button>
-        <span class="archive-pager__info" id="archivePagerInfo">1 / 1</span>
-        <button type="button" class="btn-secondary" id="archiveNext">Далі →</button>
+        <div class="errors-list" id="errorsList"></div>
+        <div class="archive-empty" id="errorsEmpty" hidden>Помилок немає.</div>
       </div>
 
       <div class="error" id="archiveError"></div>
@@ -69,7 +81,7 @@
       </div>
     </div>
 
-    <aside class="archive-users">
+    <aside class="archive-users" id="archiveUsersAside">
       <h3>Користувачі</h3>
       <input
         type="text"
@@ -81,6 +93,19 @@
     </aside>
   </div>
 </div>
+
+<template id="archiveErrorTpl">
+  <div class="errors-item">
+    <div class="errors-item__head">
+      <span class="errors-item__date"></span>
+      <span class="errors-item__user"></span>
+      <span class="errors-item__model"></span>
+      <span class="errors-item__key"></span>
+      <button type="button" class="errors-item__del" title="Видалити">×</button>
+    </div>
+    <pre class="errors-item__msg"></pre>
+  </div>
+</template>
 
 <template id="archiveItemTpl">
   <div class="archive-item">

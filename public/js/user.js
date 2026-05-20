@@ -7,6 +7,7 @@ import {
 } from './user-appearance.js';
 import { initGemini } from './user-gemini.js';
 import { initFilesStatus } from './user-files-status.js';
+import { initFrameActivity } from './user-frame-activity.js';
 import { initSettings } from './user-settings.js';
 import { initArchive } from './user-archive.js';
 
@@ -78,6 +79,7 @@ async function enterAuthed(me, { fromLogin }) {
   const showModelToast = initModelToast();
   const filesStatus = initFilesStatus();
   filesStatus.refresh();
+  const frameActivity = initFrameActivity({ frame });
   gemini.setAfterSolve(() => filesStatus.refresh());
 
   const cycleModel = async () => {
@@ -129,10 +131,13 @@ async function enterAuthed(me, { fromLogin }) {
     frame,
     proxyBase,
     onFilesChanged: () => filesStatus.refresh(),
-    onAppearanceChanged: () => filesStatus.applyPrefs(),
+    onAppearanceChanged: () => {
+      filesStatus.applyPrefs();
+      frameActivity.applyPrefs();
+    },
   });
 
-  initArchive();
+  initArchive({ me });
 }
 
 function installFavicon(me) {

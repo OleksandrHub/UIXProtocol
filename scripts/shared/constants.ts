@@ -29,6 +29,8 @@ export const MIME: Record<string, string> = {
 // Gemini
 export const REQUEST_TIMEOUT_MS = 20000;
 export const FILE_TTL_MS = 40 * 60 * 60 * 1000;
+export const FILE_PROCESSING_POLL_MS = 1000;
+export const FILE_PROCESSING_TIMEOUT_MS = 120000;
 
 export const KNOWN_MODELS = [
   'gemini-3-pro-preview',

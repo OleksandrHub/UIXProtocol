@@ -17,11 +17,10 @@ async function callOnce(
 ): Promise<string> {
   const client = makeClient(apiKey);
 
-  const fileParts = [];
-  for (const f of options.files) {
-    const uploaded = await uploadFileForKey(client, apiKey, f);
-    fileParts.push(createPartFromUri(uploaded.uri, uploaded.mimeType));
-  }
+  const uploads = await Promise.all(
+    options.files.map((f) => uploadFileForKey(client, apiKey, f))
+  );
+  const fileParts = uploads.map((u) => createPartFromUri(u.uri, u.mimeType));
 
   const contents = [
     {
@@ -47,6 +46,17 @@ async function callOnce(
   return text;
 }
 
+export class GeminiSolveError extends Error {
+  model: string;
+  apiKeyHint: string;
+  constructor(message: string, model: string, apiKeyHint: string) {
+    super(message);
+    this.name = 'GeminiSolveError';
+    this.model = model;
+    this.apiKeyHint = apiKeyHint;
+  }
+}
+
 export async function solveWithGemini(options: SolveOptions): Promise<SolveResult> {
   if (!options.models.length) throw new Error('no models enabled');
 
@@ -55,7 +65,9 @@ export async function solveWithGemini(options: SolveOptions): Promise<SolveResul
     prompt: options.prompt + STRUCTURED_SUFFIX,
   };
 
-  let lastError: unknown;
+  let lastError: Error | null = null;
+  let lastModel = '';
+  let lastKeyHint = '';
 
   for (const model of options.models) {
     for (const apiKey of options.apiKeys) {
@@ -66,7 +78,9 @@ export async function solveWithGemini(options: SolveOptions): Promise<SolveResul
           questions: parseStructured(text),
         };
       } catch (e) {
-        lastError = e;
+        lastError = e as Error;
+        lastModel = model;
+        lastKeyHint = apiKey.slice(0, 8);
         console.error(
           `[Gemini] ${model} key ${apiKey.slice(0, 8)}…: ${(e as Error).message}`
         );
@@ -74,7 +88,11 @@ export async function solveWithGemini(options: SolveOptions): Promise<SolveResul
       }
     }
   }
-  throw lastError ?? new Error('all keys/models failed');
+  throw new GeminiSolveError(
+    lastError ? lastError.message : 'all keys/models failed',
+    lastModel,
+    lastKeyHint,
+  );
 }
 
 export async function preloadFiles(
@@ -82,22 +100,26 @@ export async function preloadFiles(
   files: UserFile[]
 ): Promise<PreloadResult> {
   const total = apiKeys.length * files.length;
-  let cached = 0;
   const errors: PreloadResult['errors'] = [];
+  const tasks: Promise<boolean>[] = [];
   for (const apiKey of apiKeys) {
     const client = makeClient(apiKey);
     for (const file of files) {
-      try {
-        await uploadFileForKey(client, apiKey, file);
-        cached++;
-      } catch (e) {
-        errors.push({
-          fileId: file.id,
-          apiKey: apiKey.slice(0, 8),
-          message: (e as Error).message,
-        });
-      }
+      tasks.push(
+        uploadFileForKey(client, apiKey, file).then(
+          () => true,
+          (e: unknown) => {
+            errors.push({
+              fileId: file.id,
+              apiKey: apiKey.slice(0, 8),
+              message: (e as Error).message,
+            });
+            return false;
+          }
+        )
+      );
     }
   }
+  const cached = (await Promise.all(tasks)).filter(Boolean).length;
   return { cached, total, errors };
 }
