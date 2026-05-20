@@ -2,6 +2,7 @@ import { api } from './http.js';
 import {
   APPEARANCE_DEFAULTS,
   applyAppearance,
+  cycleVariant,
   fetchAppearance,
   loadAppearance,
 } from './user-appearance.js';
@@ -140,6 +141,16 @@ async function enterAuthed(me, { fromLogin }) {
     }
   };
 
+  const cycleVariantHotkey = async () => {
+    try {
+      const v = await cycleVariant();
+      if (v) showModelToast(`вигляд: ${v.name}`);
+      else showModelToast('варіантів немає');
+    } catch (e) {
+      showModelToast(`помилка: ${e.message}`);
+    }
+  };
+
   installShortcuts({
     frame,
     triggerGemini: triggerScreenshot,
@@ -147,6 +158,7 @@ async function enterAuthed(me, { fromLogin }) {
     toggleBar,
     cycleModel,
     toggleFriendMode: friends.toggleMode,
+    cycleVariant: cycleVariantHotkey,
   });
 
   installFavicon(me);
@@ -251,6 +263,7 @@ function installShortcuts({
   toggleBar,
   cycleModel,
   toggleFriendMode,
+  cycleVariant,
 }) {
   const isTextInput = (el) => {
     if (!el) return false;
@@ -268,7 +281,8 @@ function installShortcuts({
     const isM = k === 'm' || code === 'KeyM';
     const isC = k === 'c' || code === 'KeyC';
     const isF = k === 'f' || code === 'KeyF';
-    if (!isG && !isH && !isM && !isC && !isF) return;
+    const isR = k === 'r' || code === 'KeyR';
+    if (!isG && !isH && !isM && !isC && !isF && !isR) return;
     e.preventDefault();
     e.stopPropagation();
     if (isG) triggerGemini();
@@ -276,6 +290,7 @@ function installShortcuts({
     else if (isM) toggleBar();
     else if (isC) cycleModel();
     else if (isF) toggleFriendMode?.();
+    else if (isR) cycleVariant?.();
   };
 
   let lastWheel = 0;

@@ -1,4 +1,13 @@
 <section class="tab-panel" data-panel="appearance" hidden>
+  <h3>Варіанти вигляду відповіді</h3>
+  <div class="variants-bar">
+    <select id="variantSelect" aria-label="Активний варіант"></select>
+    <button type="button" id="variantAdd" title="Додати новий варіант">+</button>
+    <button type="button" id="variantRename" title="Перейменувати поточний">✎</button>
+    <button type="button" id="variantDelete" title="Видалити поточний">×</button>
+  </div>
+  <p class="hint">Alt+R — наступний варіант по колу.</p>
+
   <h3>Відповідь Gemini</h3>
   <div class="grid-2">
     <label
@@ -83,7 +92,41 @@
     </label>
   </div>
 
-  <p class="hint">Прозорість 0% — повністю прозоро, 100% — без прозорості.</p>
+  <h3>Кнопка Д у режимі друга (активний стан)</h3>
+  <div class="grid-2">
+    <label class="color-row"
+      >Колір тексту
+      <span class="color-row__inputs">
+        <input type="color" id="apFriendActiveColor" />
+        <input
+          type="range"
+          id="apFriendActiveColorOpacity"
+          min="0"
+          max="100"
+          step="1"
+          title="Прозорість тексту"
+        />
+        <output id="apFriendActiveColorOpacityOut" class="opacity-out">100%</output>
+      </span>
+    </label>
+    <label class="color-row"
+      >Колір фону
+      <span class="color-row__inputs">
+        <input type="color" id="apFriendActiveBg" />
+        <input
+          type="range"
+          id="apFriendActiveBgOpacity"
+          min="0"
+          max="100"
+          step="1"
+          title="Прозорість фону"
+        />
+        <output id="apFriendActiveBgOpacityOut" class="opacity-out">100%</output>
+      </span>
+    </label>
+  </div>
+
+  <p class="hint">Прозорість 0% — повністю прозоро, 100% — без прозорості. Неактивний стан Д використовує ті ж кольори що й S.</p>
 
   <h3>Індикатори</h3>
   <label class="check"

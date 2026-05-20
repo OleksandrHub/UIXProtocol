@@ -124,6 +124,42 @@
   font-style: italic;
 }
 
+// ===== Variants bar (Alt+R) =====
+
+.variants-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+
+  select {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 4px 6px;
+  }
+
+  button {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover:not(:disabled) {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+}
+
 // ===== Friend toggle button (Д) =====
 // Uses the same --screenshot-* CSS vars as the S button via the
 // shared `.gemini-panel button` selector — appearance settings affect both.
@@ -131,9 +167,8 @@
 // active state obvious without relying on toasts.
 
 #friendToggleBtn.is-active {
-  background: #2a6df4 !important;
-  color: #fff !important;
-  box-shadow: 0 0 0 2px rgba(42, 109, 244, 0.25);
+  background: var(--friend-active-bg, #2a6df4) !important;
+  color: var(--friend-active-color, #fff) !important;
 }
 
 // ===== Friend chat modal =====
