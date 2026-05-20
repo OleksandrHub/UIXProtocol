@@ -147,10 +147,19 @@ fetch('https://api.ipify.org?format=json').then(function(r){return r.json();}).t
   console.log(TAG+' браузер → зовні (реальний IP клієнта):',S,d.ip);
 }).catch(function(e){console.warn(TAG+' браузер-тест впав:',S,e.message);});
 
-// 2) IP нашого proxy-сервера (як бачить target)
+// 2) IP центрального сервера (прямий вихід, повз ноут-relay)
 fetch('/api/_diag/server-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
-  console.log(TAG+' сервер → зовні (IP який бачить target):',S,d.ip);
+  console.log(TAG+' центральний сервер → зовні (прямий):',S,d.ip);
 }).catch(function(e){console.warn(TAG+' server-ip впав:',S,e.message);});
+
+// 2b) IP через ноут-relay — це IP який бачить target для проксованого контенту
+fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+  if(d && d.ip){
+    console.log(TAG+' через ноут-relay → зовні (IP який бачить target):',S,d.ip);
+  } else {
+    console.warn(TAG+' relay-ip відповів без IP:',S,d);
+  }
+}).catch(function(e){console.warn(TAG+' relay-ip впав (relay не налаштований чи недоступний):',S,e.message);});
 
 // 3) Через 5 сек — спроба підміни через X-Forwarded-For
 setTimeout(function(){
