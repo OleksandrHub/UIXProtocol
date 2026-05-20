@@ -116,11 +116,4 @@ http
     const port = environment.port;
     console.log(`✅  Backend listening on 0.0.0.0:${port}`);
     console.log(`    Local:    http://localhost:${port}`);
-    for (const name of Object.keys(os.networkInterfaces())) {
-      for (const iface of os.networkInterfaces()[name] ?? []) {
-        if (iface.family === 'IPv4' && !iface.internal) {
-          console.log(`    Network:  http://${iface.address}:${port}   (${name})`);
-        }
-      }
-    }
   });

@@ -18,6 +18,22 @@ function rewriteUrls(text: string, targetHost: string): string {
     .replaceAll(`http://${targetHost}`, '');
 }
 
+function forceAbsoluteUrlsThroughProxy(text: string): string {
+  const proxyPrefix = `${PROXY_PREFIX}/`;
+  return text.replace(/https?:\/\/[^\s"'<>`\\)]+/gi, (match, offset, full) => {
+    if (offset >= proxyPrefix.length && full.slice(offset - proxyPrefix.length, offset) === proxyPrefix) {
+      return match;
+    }
+    return `${proxyPrefix}${match}`;
+  });
+}
+
+function rewriteLocationToProxy(value: string): string {
+  if (/^https?:\/\//i.test(value)) return `${PROXY_PREFIX}/${value}`;
+  if (value.startsWith('//')) return `${PROXY_PREFIX}/https:${value}`;
+  return value;
+}
+
 function normalizeIp(ip: string | undefined): string {
   if (!ip) return '';
   if (ip.startsWith('::ffff:')) return ip.slice(7);
@@ -239,9 +255,6 @@ function performProxy(
   incomingHeaders['x-forwarded-proto'] = 'https';
   incomingHeaders['x-forwarded-host'] = targetHost;
 
-  // If a forward-proxy laptop is selected for this user, the outbound TCP
-  // goes through the laptop (so target sees the laptop's IP). The laptop
-  // expects the real target URL in X-Relay-Url and re-writes Host on its end.
   const fwdProxy = pickForwardProxy(userId);
   let outboundHostname: string;
   let outboundPort: number;
@@ -254,6 +267,12 @@ function performProxy(
     if (!outboundPath) outboundPath = '/';
     outboundLib = fwdProxy.protocol === 'https:' ? https : http;
     incomingHeaders.host = fwdProxy.host;
+ 
+    delete incomingHeaders['x-forwarded-for'];
+    delete incomingHeaders['x-real-ip'];
+    delete incomingHeaders['forwarded'];
+    delete incomingHeaders['x-forwarded-proto'];
+    delete incomingHeaders['x-forwarded-host'];
     incomingHeaders['x-relay-url'] = targetUrl.href;
     if (environment.forwardProxySecret) {
       incomingHeaders['x-relay-secret'] = environment.forwardProxySecret;
@@ -277,7 +296,8 @@ function performProxy(
       const headers: http.OutgoingHttpHeaders = { ...proxyRes.headers };
 
       if (headers['location']) {
-        headers['location'] = rewriteUrls(String(headers['location']), targetHost);
+        const rewritten = rewriteUrls(String(headers['location']), targetHost);
+        headers['location'] = rewriteLocationToProxy(rewritten);
       }
       if (opts.stripSetCookie) {
         delete headers['set-cookie'];
@@ -317,6 +337,7 @@ function performProxy(
         proxyRes.on('data', (c: Buffer) => chunks.push(c));
         proxyRes.on('end', () => {
           let text = rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
+          text = forceAbsoluteUrlsThroughProxy(text);
           if (ct.includes('text/html')) {
             text = injectKeepActive(text);
             text = injectIpDiag(text);
