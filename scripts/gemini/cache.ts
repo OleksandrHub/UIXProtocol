@@ -1,6 +1,13 @@
 import { FileState, GoogleGenAI } from '@google/genai';
 
 import {
+  dropStoredCacheForKey,
+  dropStoredUploadsByFileIds,
+  getStoredCachedFileIds,
+  getStoredUpload,
+  saveStoredUpload,
+} from '../db/gemini-uploads';
+import {
   FILE_PROCESSING_POLL_MS,
   FILE_PROCESSING_TIMEOUT_MS,
   FILE_TTL_MS,
@@ -10,7 +17,8 @@ import type { UploadedFile, UserFile } from '../shared/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const uploadCache = new Map<string, UploadedFile>();
+// In-flight uploads stay in memory: a Promise can't survive a process restart
+// and we only need to dedupe concurrent uploads within a single Node process.
 const pendingUploads = new Map<string, Promise<UploadedFile>>();
 
 function cacheKey(apiKey: string, fileId: number): string {
@@ -30,16 +38,16 @@ export function makeClient(apiKey: string): GoogleGenAI {
 export async function uploadFileForKey(
   client: GoogleGenAI,
   apiKey: string,
-  file: UserFile
+  file: UserFile,
 ): Promise<UploadedFile> {
-  const key = cacheKey(apiKey, file.id);
-  const cached = uploadCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached;
+  const cached = getStoredUpload(apiKey, file.id);
+  if (cached) return cached;
 
+  const key = cacheKey(apiKey, file.id);
   const inFlight = pendingUploads.get(key);
   if (inFlight) return inFlight;
 
-  const work = doUpload(client, key, file);
+  const work = doUpload(client, apiKey, file);
   pendingUploads.set(key, work);
   try {
     return await work;
@@ -50,8 +58,8 @@ export async function uploadFileForKey(
 
 async function doUpload(
   client: GoogleGenAI,
-  key: string,
-  file: UserFile
+  apiKey: string,
+  file: UserFile,
 ): Promise<UploadedFile> {
   const blob = new Blob([new Uint8Array(file.data)], { type: file.mime });
   let uploaded = await client.files.upload({
@@ -79,36 +87,18 @@ async function doUpload(
     mimeType: uploaded.mimeType,
     expiresAt: Date.now() + FILE_TTL_MS,
   };
-  uploadCache.set(key, entry);
+  saveStoredUpload(apiKey, file.id, entry);
   return entry;
 }
 
 export function dropCacheForKey(apiKey: string): void {
-  const prefix = `${apiKey}::`;
-  for (const key of [...uploadCache.keys()]) {
-    if (key.startsWith(prefix)) uploadCache.delete(key);
-  }
+  dropStoredCacheForKey(apiKey);
 }
 
 export function invalidateUploadsForUser(fileIds: number[]): void {
-  for (const id of fileIds) {
-    for (const key of [...uploadCache.keys()]) {
-      if (key.endsWith(`::${id}`)) uploadCache.delete(key);
-    }
-  }
+  dropStoredUploadsByFileIds(fileIds);
 }
 
 export function getCachedFileIds(apiKey: string): Set<number> {
-  const ids = new Set<number>();
-  const prefix = `${apiKey}::`;
-  for (const [key, entry] of uploadCache) {
-    if (!key.startsWith(prefix)) continue;
-    if (entry.expiresAt <= Date.now()) {
-      uploadCache.delete(key);
-      continue;
-    }
-    const id = Number(key.slice(prefix.length));
-    if (Number.isFinite(id)) ids.add(id);
-  }
-  return ids;
+  return getStoredCachedFileIds(apiKey);
 }

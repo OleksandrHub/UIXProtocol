@@ -40,6 +40,24 @@ export function sendNoContent(res: ServerResponse): void {
   res.end();
 }
 
+export function readBinary(req: IncomingMessage, maxBytes = 15_000_000): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on('data', (c: Buffer) => {
+      total += c.length;
+      if (total > maxBytes) {
+        req.destroy();
+        reject(new Error('payload too large'));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 export function getCurrentUser(req: IncomingMessage): User | null {
   const uid = getSessionUserId(req);
   return uid != null ? getUserById(uid) : null;

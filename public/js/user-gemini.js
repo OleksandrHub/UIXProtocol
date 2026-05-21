@@ -1,5 +1,4 @@
-import { api } from './http.js';
-import { captureFrameAsBase64Jpeg } from './user-screenshot.js';
+import { captureFrameAsBlobJpeg } from './user-screenshot.js';
 
 export function initGemini() {
   const btn = document.getElementById('screenshotBtn');
@@ -22,12 +21,16 @@ export function initGemini() {
     btn.disabled = true;
     showResult('...');
     try {
-      const imageBase64 = await captureFrameAsBase64Jpeg(frameEl);
-      const { answer } = await api('/gemini/solve', {
+      const blob = await captureFrameAsBlobJpeg(frameEl);
+      const res = await fetch('/api/gemini/solve', {
         method: 'POST',
-        body: JSON.stringify({ imageBase64 }),
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob,
       });
-      showResult(answer || '—');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+      showResult(data?.answer || '—');
       onAfterSolve?.();
     } catch (e) {
       console.error('[screenshot]', e);

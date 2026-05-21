@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 import { handleApi } from '../api/router';
 import { getSessionUserId } from '../auth/session';
-import { getUserById } from '../db';
+import { getUserById, pruneOldGeminiErrors } from '../db';
 import { environment } from '../../environments/environment';
 import { PREVIEW_RE, PUBLIC_DIR } from '../shared/constants';
 import { safeJsPath, serveFile } from '../server/static';
@@ -116,4 +116,10 @@ http
     const port = environment.port;
     console.log(`✅  Backend listening on 0.0.0.0:${port}`);
     console.log(`    Local:    http://localhost:${port}`);
+    const pruned = pruneOldGeminiErrors();
+    if (pruned > 0) console.log(`[cleanup] pruned ${pruned} old gemini_errors`);
+    setInterval(() => {
+      const n = pruneOldGeminiErrors();
+      if (n > 0) console.log(`[cleanup] pruned ${n} old gemini_errors`);
+    }, 24 * 60 * 60 * 1000).unref();
   });

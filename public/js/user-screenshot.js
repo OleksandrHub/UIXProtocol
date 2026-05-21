@@ -40,7 +40,7 @@ async function captureCanvas(frameEl) {
     1,
     doc.documentElement.scrollWidth || win.innerWidth || doc.documentElement.clientWidth || 1,
   );
-  const renderScale = Math.min(2, Math.max(1, win.devicePixelRatio || 1));
+  const renderScale = Math.min(1.5, Math.max(1, win.devicePixelRatio || 1));
   return h2c(root, {
     useCORS: true,
     allowTaint: true,
@@ -56,7 +56,7 @@ async function captureCanvas(frameEl) {
   });
 }
 
-function canvasToBase64Jpeg(canvas) {
+function canvasToBlobJpeg(canvas) {
   return new Promise((resolve, reject) => {
     const maxW = 2200;
     let target = canvas;
@@ -73,18 +73,29 @@ function canvasToBase64Jpeg(canvas) {
     target.toBlob(
       (blob) => {
         if (!blob) return reject(new Error('blob failed'));
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
+        resolve(blob);
       },
       'image/jpeg',
-      0.92,
+      0.8,
     );
   });
 }
 
-export async function captureFrameAsBase64Jpeg(frameEl) {
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function captureFrameAsBlobJpeg(frameEl) {
   const canvas = await captureCanvas(frameEl);
-  return canvasToBase64Jpeg(canvas);
+  return canvasToBlobJpeg(canvas);
+}
+
+export async function captureFrameAsBase64Jpeg(frameEl) {
+  const blob = await captureFrameAsBlobJpeg(frameEl);
+  return blobToBase64(blob);
 }

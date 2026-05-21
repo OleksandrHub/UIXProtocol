@@ -9,6 +9,27 @@ import type {
   UserRow,
 } from '../shared/types';
 
+const USER_CACHE_TTL_MS = 30_000;
+const userCache = new Map<number, { user: User; expiresAt: number }>();
+
+function readCache(id: number): User | null {
+  const entry = userCache.get(id);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    userCache.delete(id);
+    return null;
+  }
+  return entry.user;
+}
+
+function writeCache(user: User): void {
+  userCache.set(user.id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+}
+
+function invalidateCache(id: number): void {
+  userCache.delete(id);
+}
+
 function rowToUser(row: UserRow): User {
   return {
     id: row.id,
@@ -20,33 +41,16 @@ function rowToUser(row: UserRow): User {
     activePromptId: row.active_prompt_id ?? '',
     enabledModels: safeParseArray<string>(row.enabled_models),
     activeModel: row.active_model ?? '',
+    archiveQuestions: row.archive_questions !== 0,
   };
-}
-
-function nextUserId(): number {
-  // Pick the smallest free positive id so deletes free IDs are reused.
-  const row = db
-    .prepare(
-      `SELECT MIN(candidate) AS id
-       FROM (
-         SELECT 1 AS candidate
-         UNION ALL
-         SELECT id + 1 FROM users
-       ) candidates
-       WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = candidates.candidate)`,
-    )
-    .get() as { id: number | null };
-  return Number(row?.id ?? 1);
 }
 
 export function createUser(input: CreateUserInput): User {
   const insert = db.prepare(
-    'INSERT INTO users (id, name, password_hash, password_first, api_keys, is_admin, target_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO users (name, password_hash, password_first, api_keys, is_admin, target_url) VALUES (?, ?, ?, ?, ?, ?)',
   );
   const create = db.transaction((payload: CreateUserInput) => {
-    const id = nextUserId();
-    insert.run(
-      id,
+    const info = insert.run(
       payload.name,
       hashPassword(payload.password),
       encrypt(firstChar(payload.password)),
@@ -54,7 +58,7 @@ export function createUser(input: CreateUserInput): User {
       payload.isAdmin ? 1 : 0,
       encrypt(payload.targetUrl ?? ''),
     );
-    const user = getUserById(id);
+    const user = getUserById(Number(info.lastInsertRowid));
     if (!user) throw new Error('failed to read created user');
     return user;
   });
@@ -62,6 +66,7 @@ export function createUser(input: CreateUserInput): User {
 }
 
 export function updateUser(id: number, input: UpdateUserInput): User | null {
+  invalidateCache(id);
   const sets: string[] = [];
   const params: unknown[] = [];
   if (input.name !== undefined) {
@@ -102,6 +107,10 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
     sets.push('active_model = ?');
     params.push(input.activeModel);
   }
+  if (input.archiveQuestions !== undefined) {
+    sets.push('archive_questions = ?');
+    params.push(input.archiveQuestions ? 1 : 0);
+  }
   if (!sets.length) return getUserById(id);
   params.push(id);
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params);
@@ -109,13 +118,21 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
 }
 
 export function getUserById(id: number): User | null {
+  const cached = readCache(id);
+  if (cached) return cached;
   const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
-  return row ? rowToUser(row) : null;
+  if (!row) return null;
+  const user = rowToUser(row);
+  writeCache(user);
+  return user;
 }
 
 export function getUserByName(name: string): User | null {
   const row = db.prepare('SELECT * FROM users WHERE name = ?').get(name) as UserRow | undefined;
-  return row ? rowToUser(row) : null;
+  if (!row) return null;
+  const user = rowToUser(row);
+  writeCache(user);
+  return user;
 }
 
 export function listUsers(): User[] {
@@ -124,6 +141,7 @@ export function listUsers(): User[] {
 }
 
 export function deleteUser(id: number): boolean {
+  invalidateCache(id);
   const info = db.prepare('DELETE FROM users WHERE id = ?').run(id);
   return info.changes > 0;
 }
@@ -133,6 +151,7 @@ function backfillFirstChar(row: UserRow, password: string): void {
   const fc = firstChar(password);
   if (!fc) return;
   db.prepare('UPDATE users SET password_first = ? WHERE id = ?').run(encrypt(fc), row.id);
+  invalidateCache(row.id);
 }
 
 export function verifyPasswordById(id: number, password: string): User | null {

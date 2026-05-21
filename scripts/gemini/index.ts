@@ -28,7 +28,12 @@ async function callOnce(
       parts: [
         { text: options.prompt },
         ...fileParts,
-        { inlineData: { mimeType: 'image/jpeg', data: options.imageBase64 } },
+        {
+          inlineData: {
+            mimeType: options.imageMime,
+            data: options.image.toString('base64'),
+          },
+        },
       ],
     },
   ];
@@ -36,7 +41,7 @@ async function callOnce(
   const response = await client.models.generateContent({
     model,
     config: {
-      thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 },
+      thinkingConfig: { thinkingBudget: model.includes('pro') ? 4000 : 0 },
     },
     contents,
   });
@@ -58,40 +63,52 @@ export class GeminiSolveError extends Error {
 }
 
 export async function solveWithGemini(options: SolveOptions): Promise<SolveResult> {
-  if (!options.models.length) throw new Error('no models enabled');
+  if (!options.model) throw new Error('no model selected');
+  if (!options.apiKeys.length) throw new Error('no api keys configured');
 
   const augmented: SolveOptions = {
     ...options,
-    prompt: options.prompt + STRUCTURED_SUFFIX,
+    prompt: options.collectArchive === false
+      ? options.prompt
+      : options.prompt + STRUCTURED_SUFFIX,
   };
 
-  let lastError: Error | null = null;
-  let lastModel = '';
-  let lastKeyHint = '';
+  // Race all keys in parallel — first success wins, rate-limited keys
+  // don't block faster ones. Trades extra quota for latency.
+  const errors: Array<{ apiKey: string; message: string }> = [];
+  let resolved = false;
 
-  for (const model of options.models) {
-    for (const apiKey of options.apiKeys) {
-      try {
-        const text = await callOnce(apiKey, model, augmented);
-        return {
-          answer: parseResultText(text),
-          questions: parseStructured(text),
-        };
-      } catch (e) {
-        lastError = e as Error;
-        lastModel = model;
-        lastKeyHint = apiKey.slice(0, 8);
-        console.error(
-          `[Gemini] ${model} key ${apiKey.slice(0, 8)}…: ${(e as Error).message}`
-        );
-        dropCacheForKey(apiKey);
-      }
+  const attempts = options.apiKeys.map(async (apiKey) => {
+    try {
+      const text = await callOnce(apiKey, options.model, augmented);
+      if (resolved) return null;
+      resolved = true;
+      return text;
+    } catch (e) {
+      errors.push({ apiKey, message: (e as Error).message });
+      console.error(
+        `[Gemini] ${options.model} key ${apiKey.slice(0, 8)}…: ${(e as Error).message}`,
+      );
+      dropCacheForKey(apiKey);
+      return null;
     }
+  });
+
+  const results = await Promise.all(attempts);
+  const winner = results.find((t): t is string => typeof t === 'string' && t.length > 0);
+
+  if (winner) {
+    return {
+      answer: parseResultText(winner),
+      questions: options.collectArchive === false ? [] : parseStructured(winner),
+    };
   }
+
+  const last = errors[errors.length - 1];
   throw new GeminiSolveError(
-    lastError ? lastError.message : 'all keys/models failed',
-    lastModel,
-    lastKeyHint,
+    last?.message ?? 'all keys failed',
+    options.model,
+    last ? last.apiKey.slice(0, 8) : '',
   );
 }
 

@@ -1,5 +1,7 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
+import * as zlib from 'node:zlib';
+import type { Readable } from 'node:stream';
 import { URL } from 'node:url';
 
 import { getUserById } from '../db';
@@ -13,19 +15,26 @@ import { getSessionUserId, parseCookie } from '../auth/session';
 import { pickRelay, reportRelayFailure } from './relay-pool';
 import type { ProxyOpts } from '../shared/types';
 
-function rewriteUrls(text: string, targetHost: string): string {
-  return text
-    .replaceAll(`https://${targetHost}`, '')
-    .replaceAll(`http://${targetHost}`, '');
-}
+const URL_RE = /https?:\/\/[^\s"'<>`\\)]+/gi;
+const PROXY_PREFIX_SLASH = `${PROXY_PREFIX}/`;
+const STRIP_HOST_RE = /^https?:\/\/[^/]+/;
 
-function forceAbsoluteUrlsThroughProxy(text: string): string {
-  const proxyPrefix = `${PROXY_PREFIX}/`;
-  return text.replace(/https?:\/\/[^\s"'<>`\\)]+/gi, (match, offset, full) => {
-    if (offset >= proxyPrefix.length && full.slice(offset - proxyPrefix.length, offset) === proxyPrefix) {
+function rewriteAllUrls(text: string, targetHost: string): string {
+  return text.replace(URL_RE, (match, offset: number, full: string) => {
+    if (
+      offset >= PROXY_PREFIX_SLASH.length &&
+      full.slice(offset - PROXY_PREFIX_SLASH.length, offset) === PROXY_PREFIX_SLASH
+    ) {
       return match;
     }
-    return `${proxyPrefix}${match}`;
+    const lower = match.toLowerCase();
+    const hostStart = lower.indexOf('://') + 3;
+    const hostEnd = lower.indexOf('/', hostStart);
+    const host = hostEnd < 0 ? lower.slice(hostStart) : lower.slice(hostStart, hostEnd);
+    if (host === targetHost.toLowerCase()) {
+      return match.replace(STRIP_HOST_RE, '');
+    }
+    return `${PROXY_PREFIX_SLASH}${match}`;
   });
 }
 
@@ -132,12 +141,6 @@ if(D.readyState==='loading')D.addEventListener('DOMContentLoaded',fire,{once:tru
 else setTimeout(fire,0);
 }catch(e){}})();</script>`;
 
-function injectKeepActive(html: string): string {
-  if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/<head\b([^>]*)>/i, `<head$1>${KEEP_ACTIVE_SCRIPT}`);
-  }
-  return KEEP_ACTIVE_SCRIPT + html;
-}
 
 const IP_DIAG_SCRIPT = `<script data-uix-ipdiag>(function(){
 var TAG='%c[UIX-IP]',S='color:#2a6df4;font-weight:600';
@@ -153,32 +156,33 @@ fetch('/api/_diag/server-ip',{credentials:'same-origin'}).then(function(r){retur
   console.log(TAG+' центральний сервер → зовні (прямий):',S,d.ip);
 }).catch(function(e){console.warn(TAG+' server-ip впав:',S,e.message);});
 
-// 2b) IP через ноут-relay — це IP який бачить target для проксованого контенту
+// 2b) IP через ноут-relay'ї — це IP'и які бачить target для проксованого контенту
 fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
-  if(d && d.ip){
-    console.log(TAG+' через ноут-relay → зовні (IP який бачить target):',S,d.ip);
+  if(d && Array.isArray(d.relays) && d.relays.length){
+    d.relays.forEach(function(r){
+      if(r.ip) console.log(TAG+' relay '+r.url+' → '+r.ip,S);
+      else console.warn(TAG+' relay '+r.url+' → no IP ('+(r.error||'unknown')+')',S);
+    });
   } else {
-    console.warn(TAG+' relay-ip відповів без IP:',S,d);
+    console.warn(TAG+' relay-ip відповів без relays:',S,d);
   }
 }).catch(function(e){console.warn(TAG+' relay-ip впав (relay не налаштований чи недоступний):',S,e.message);});
 })();</script>`;
 
-function injectIpDiag(html: string): string {
-  if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/<head\b([^>]*)>/i, `<head$1>${IP_DIAG_SCRIPT}`);
-  }
-  return IP_DIAG_SCRIPT + html;
-}
+const VIEWPORT_RE = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
+const HEAD_RE = /<head\b([^>]*)>/i;
+const INJECTED_HEAD_PREFIX = KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT;
 
-function rewriteViewport(html: string): string {
-  const viewportRe = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
-  if (viewportRe.test(html)) {
-    return html.replace(viewportRe, PERMISSIVE_VIEWPORT);
+function injectHtmlHelpers(html: string): string {
+  const hasViewport = VIEWPORT_RE.test(html);
+  let body = hasViewport ? html.replace(VIEWPORT_RE, PERMISSIVE_VIEWPORT) : html;
+  if (HEAD_RE.test(body)) {
+    const injection = hasViewport
+      ? `<head$1>${INJECTED_HEAD_PREFIX}`
+      : `<head$1>${INJECTED_HEAD_PREFIX}${PERMISSIVE_VIEWPORT}`;
+    return body.replace(HEAD_RE, injection);
   }
-  if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/<head\b([^>]*)>/i, `<head$1>${PERMISSIVE_VIEWPORT}`);
-  }
-  return html;
+  return INJECTED_HEAD_PREFIX + body;
 }
 
 function pickForwardProxy(userId: number | null): URL | null {
@@ -235,7 +239,6 @@ function performProxy(
   };
   if (cleanedCookie) incomingHeaders['cookie'] = cleanedCookie;
   else delete incomingHeaders['cookie'];
-  delete incomingHeaders['accept-encoding'];
   if (fwd.xff) incomingHeaders['x-forwarded-for'] = fwd.xff;
   if (fwd.realIp) incomingHeaders['x-real-ip'] = fwd.realIp;
   if (fwd.forwarded) incomingHeaders['forwarded'] = fwd.forwarded;
@@ -283,8 +286,13 @@ function performProxy(
       const headers: http.OutgoingHttpHeaders = { ...proxyRes.headers };
 
       if (headers['location']) {
-        const rewritten = rewriteUrls(String(headers['location']), targetHost);
-        headers['location'] = rewriteLocationToProxy(rewritten);
+        const loc = String(headers['location']);
+        const stripped = loc.startsWith(`https://${targetHost}`)
+          ? loc.slice(`https://${targetHost}`.length) || '/'
+          : loc.startsWith(`http://${targetHost}`)
+          ? loc.slice(`http://${targetHost}`.length) || '/'
+          : loc;
+        headers['location'] = rewriteLocationToProxy(stripped);
       }
       if (opts.stripSetCookie) {
         delete headers['set-cookie'];
@@ -320,20 +328,28 @@ function performProxy(
       const needsRewrite = ct.includes('text/html') || ct.includes('javascript');
 
       if (needsRewrite) {
+        const enc = String(proxyRes.headers['content-encoding'] ?? '').toLowerCase();
+        let stream: Readable = proxyRes;
+        if (enc === 'gzip') stream = proxyRes.pipe(zlib.createGunzip());
+        else if (enc === 'deflate') stream = proxyRes.pipe(zlib.createInflate());
+        else if (enc === 'br') stream = proxyRes.pipe(zlib.createBrotliDecompress());
         const chunks: Buffer[] = [];
-        proxyRes.on('data', (c: Buffer) => chunks.push(c));
-        proxyRes.on('end', () => {
-          let text = rewriteUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
-          text = forceAbsoluteUrlsThroughProxy(text);
+        stream.on('data', (c: Buffer) => chunks.push(c));
+        stream.on('end', () => {
+          let text = rewriteAllUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
           if (ct.includes('text/html')) {
-            text = injectKeepActive(text);
-            text = injectIpDiag(text);
-            text = rewriteViewport(text);
+            text = injectHtmlHelpers(text);
           }
           const body = Buffer.from(text, 'utf-8');
+          delete headers['content-encoding'];
           headers['content-length'] = body.length;
           res.writeHead(proxyRes.statusCode ?? 502, headers);
           res.end(body);
+        });
+        stream.on('error', (err: Error) => {
+          console.error('[Proxy decode error]', err.message);
+          if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+          res.end('decode error: ' + err.message);
         });
       } else {
         res.writeHead(proxyRes.statusCode ?? 502, headers);

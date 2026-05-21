@@ -16,7 +16,7 @@ import {
   preloadFiles,
   solveWithGemini,
 } from '../gemini';
-import { readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
+import { readBinary, readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
 
 export async function handleFiles(
   req: IncomingMessage,
@@ -111,9 +111,23 @@ export async function handleFiles(
   if (path === '/api/gemini/solve' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
-    const body = await readJson<{ imageBase64?: string }>(req, 15_000_000);
-    if (!body.imageBase64) {
-      sendJson(res, 400, { error: 'imageBase64 required' });
+    const contentType = String(req.headers['content-type'] ?? '');
+    let image: Buffer;
+    let imageMime: string;
+    if (contentType.startsWith('image/')) {
+      image = await readBinary(req, 15_000_000);
+      imageMime = contentType.split(';')[0]!.trim();
+    } else {
+      const body = await readJson<{ imageBase64?: string }>(req, 15_000_000);
+      if (!body.imageBase64) {
+        sendJson(res, 400, { error: 'image binary or imageBase64 required' });
+        return true;
+      }
+      image = Buffer.from(body.imageBase64, 'base64');
+      imageMime = 'image/jpeg';
+    }
+    if (!image.length) {
+      sendJson(res, 400, { error: 'empty image' });
       return true;
     }
     const keys = (me.apiKeys ?? []).filter(Boolean);
@@ -129,48 +143,47 @@ export async function handleFiles(
 
     const knownSet = new Set<string>(KNOWN_MODELS);
     const enabled = (me.enabledModels ?? []).filter((m) => knownSet.has(m));
-    // Use ONLY the active model. Fallback to other models would mask the
-    // selected choice (and burn quota on backups). Multiple API keys are
-    // still tried for that one model so a single rate-limited key doesn't
-    // kill the request.
     const activeModel =
       me.activeModel && enabled.includes(me.activeModel)
         ? me.activeModel
         : (enabled[0] ?? 'gemini-2.5-flash');
-    const models = [activeModel];
 
     const files = getUserFiles(me.id);
 
+    const archive = me.archiveQuestions !== false;
     try {
       const result = await solveWithGemini({
         apiKeys: keys,
-        imageBase64: body.imageBase64,
+        image,
+        imageMime,
         prompt: promptText,
-        models,
+        model: activeModel,
         files,
+        collectArchive: archive,
       });
-      try {
-        const img = Buffer.from(body.imageBase64, 'base64');
-        const parsed = result.questions.length
-          ? result.questions
-          : [{ question: '', options: [] as string[], correct: result.answer }];
-        for (const q of parsed) {
-          addQuestion(
-            me.id,
-            img,
-            'image/jpeg',
-            q.question,
-            q.options,
-            q.correct || result.answer,
-          );
+      if (archive) {
+        try {
+          const parsed = result.questions.length
+            ? result.questions
+            : [{ question: '', options: [] as string[], correct: result.answer }];
+          for (const q of parsed) {
+            addQuestion(
+              me.id,
+              image,
+              imageMime,
+              q.question,
+              q.options,
+              q.correct || result.answer,
+            );
+          }
+        } catch (e) {
+          console.error('[Questions] failed to archive:', (e as Error).message);
         }
-      } catch (e) {
-        console.error('[Questions] failed to archive:', (e as Error).message);
       }
       sendJson(res, 200, { answer: result.answer });
     } catch (e) {
       const err = e as Error;
-      const model = err instanceof GeminiSolveError ? err.model : (me.activeModel ?? '');
+      const model = err instanceof GeminiSolveError ? err.model : activeModel;
       const hint = err instanceof GeminiSolveError ? err.apiKeyHint : '';
       try {
         addGeminiError(me.id, model, hint, err.message);
