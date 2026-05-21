@@ -33,6 +33,9 @@ if (!hasCol('enabled_models')) {
 if (!hasCol('active_model')) {
   db.exec("ALTER TABLE users ADD COLUMN active_model TEXT NOT NULL DEFAULT ''");
 }
+if (!hasCol('archive_questions')) {
+  db.exec('ALTER TABLE users ADD COLUMN archive_questions INTEGER NOT NULL DEFAULT 1');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_files (
@@ -104,4 +107,18 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_gemini_errors_created ON gemini_errors(created_at DESC);
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS gemini_uploads (
+    api_key_hash TEXT NOT NULL,
+    file_id INTEGER NOT NULL,
+    uri TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    PRIMARY KEY (api_key_hash, file_id),
+    FOREIGN KEY (file_id) REFERENCES user_files(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_gemini_uploads_file ON gemini_uploads(file_id);
+  CREATE INDEX IF NOT EXISTS idx_gemini_uploads_key ON gemini_uploads(api_key_hash);
 `);

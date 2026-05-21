@@ -50,21 +50,13 @@ async function fetchServerIp(): Promise<string> {
   return r.ip;
 }
 
-function pickRelayUrl(): URL | null {
-  const first = environment.forwardProxies[0];
-  if (!first) return null;
-  try {
-    return new URL(first);
-  } catch {
-    return null;
-  }
-}
-
-function probeViaRelay(): Promise<ProbeResult> {
+function probeViaSpecificRelay(rawRelayUrl: string): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
-    const relay = pickRelayUrl();
-    if (!relay) {
-      reject(new Error('forward relay is not configured'));
+    let relay: URL;
+    try {
+      relay = new URL(rawRelayUrl);
+    } catch {
+      reject(new Error('invalid relay URL'));
       return;
     }
 
@@ -128,16 +120,22 @@ export async function handleDiag(
   }
 
   if (path === '/api/_diag/relay-ip' && method === 'GET') {
-    try {
-      const probeResult = await probeViaRelay();
-      sendJson(res, 200, {
-        ip: probeResult.ip,
-        status: probeResult.status,
-        probe: IP_PROBE,
-      });
-    } catch (e) {
-      sendJson(res, 502, { error: (e as Error).message });
+    const healthy = getRelayStatuses().filter((r) => r.healthy);
+    if (healthy.length === 0) {
+      sendJson(res, 502, { error: 'no healthy relays configured' });
+      return true;
     }
+    const results = await Promise.all(
+      healthy.map(async (r) => {
+        try {
+          const probeResult = await probeViaSpecificRelay(r.url);
+          return { url: r.url, ip: probeResult.ip, status: probeResult.status };
+        } catch (e) {
+          return { url: r.url, ip: '', status: 0, error: (e as Error).message };
+        }
+      }),
+    );
+    sendJson(res, 200, { probe: IP_PROBE, relays: results });
     return true;
   }
 

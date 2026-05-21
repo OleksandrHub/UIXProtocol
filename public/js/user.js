@@ -19,8 +19,10 @@ if (!Number.isFinite(id)) location.href = '/';
 applyAppearance(APPEARANCE_DEFAULTS);
 
 const frame = document.getElementById('frame');
-const me = await api('/me').catch(() => null);
-const cfg = await api('/config');
+const [me, cfg] = await Promise.all([
+  api('/me').catch(() => null),
+  api('/config'),
+]);
 
 if (me && me.id === id) {
   await enterAuthed(me, { fromLogin: false });
@@ -242,9 +244,28 @@ function installFavicon(me) {
     try {
       const fdoc = frame.contentDocument;
       if (!fdoc || !fdoc.head) return;
-      metaObserver = new MutationObserver(syncMetaFromFrame);
+      const isRelevant = (m) => {
+        if (m.type === 'attributes') return m.attributeName === 'href';
+        if (m.type === 'characterData') {
+          return m.target?.parentNode?.nodeName === 'TITLE';
+        }
+        if (m.type === 'childList') {
+          const all = [...m.addedNodes, ...m.removedNodes];
+          return all.some(
+            (n) => n.nodeName === 'TITLE' || (n.nodeName === 'LINK' && /icon/i.test(n.rel || '')),
+          );
+        }
+        return false;
+      };
+      metaObserver = new MutationObserver((mutations) => {
+        if (mutations.some(isRelevant)) syncMetaFromFrame();
+      });
       metaObserver.observe(fdoc.head, {
-        childList: true, subtree: true, characterData: true,
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['href'],
       });
     } catch {}
   };
@@ -332,6 +353,8 @@ async function initLogin() {
   if (input) input.value = '';
 
   let busy = false;
+  let lastAttemptAt = 0;
+  const MIN_GAP_MS = 100;
 
   const showWrong = () => {
     prompt.classList.remove('shake', 'wrong');
@@ -341,6 +364,9 @@ async function initLogin() {
 
   const tryLogin = async (char) => {
     if (busy) return;
+    const now = Date.now();
+    if (now - lastAttemptAt < MIN_GAP_MS) return;
+    lastAttemptAt = now;
     busy = true;
     prompt.classList.add('is-busy');
     try {

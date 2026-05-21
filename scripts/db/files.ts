@@ -2,22 +2,6 @@ import { decryptBuffer, encryptBuffer } from '../db/cipher';
 import { db } from '../db/connection';
 import type { UserFile, UserFileMeta, UserFileRow } from '../shared/types';
 
-function nextFileId(): number {
-  // Pick the smallest free positive id so deletes free IDs are reused.
-  const row = db
-    .prepare(
-      `SELECT MIN(candidate) AS id
-       FROM (
-         SELECT 1 AS candidate
-         UNION ALL
-         SELECT id + 1 FROM user_files
-       ) candidates
-       WHERE NOT EXISTS (SELECT 1 FROM user_files f WHERE f.id = candidates.candidate)`,
-    )
-    .get() as { id: number | null };
-  return Number(row?.id ?? 1);
-}
-
 function rowToFileMeta(row: UserFileRow): UserFileMeta {
   return {
     id: row.id,
@@ -59,14 +43,13 @@ export function addUserFile(
   data: Buffer,
 ): UserFileMeta {
   const insert = db.prepare(
-    'INSERT INTO user_files (id, user_id, name, mime, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO user_files (user_id, name, mime, size, data, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   );
   const create = db.transaction((): UserFileMeta => {
-    const id = nextFileId();
-    insert.run(id, userId, name, mime, data.length, encryptBuffer(data), Date.now());
+    const info = insert.run(userId, name, mime, data.length, encryptBuffer(data), Date.now());
     const row = db
       .prepare('SELECT id, user_id, name, mime, size, created_at FROM user_files WHERE id = ?')
-      .get(id) as UserFileRow;
+      .get(Number(info.lastInsertRowid)) as UserFileRow;
     return rowToFileMeta(row);
   });
   return create();

@@ -59,3 +59,11 @@ export function clearGeminiErrors(): number {
   const info = db.prepare('DELETE FROM gemini_errors').run();
   return info.changes;
 }
+
+const RETAIN_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function pruneOldGeminiErrors(): number {
+  const cutoff = Date.now() - RETAIN_MS;
+  const info = db.prepare('DELETE FROM gemini_errors WHERE created_at < ?').run(cutoff);
+  return info.changes;
+}

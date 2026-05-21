@@ -18,6 +18,7 @@ export interface UpdateUserInput {
   activePromptId?: string;
   enabledModels?: string[];
   activeModel?: string;
+  archiveQuestions?: boolean;
 }
 
 export interface User {
@@ -30,6 +31,7 @@ export interface User {
   activePromptId: string;
   enabledModels: string[];
   activeModel: string;
+  archiveQuestions: boolean;
 }
 
 export interface UserFile extends UserFileMeta {
@@ -98,6 +100,7 @@ export interface UserRow {
   active_prompt_id: string;
   enabled_models: string;
   active_model: string;
+  archive_questions: number;
 }
 
 export interface GeminiErrorRow {
@@ -152,10 +155,12 @@ export interface FriendsList {
 
 export interface SolveOptions {
   apiKeys: string[];
-  imageBase64: string;
+  image: Buffer;
+  imageMime: string;
   prompt: string;
-  models: string[];
+  model: string;
   files: UserFile[];
+  collectArchive?: boolean;
 }
 
 export interface ParsedQuestion {

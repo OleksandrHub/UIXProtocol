@@ -89,6 +89,18 @@ export async function handleMe(
     return true;
   }
 
+  if (path === '/api/me/archive-questions' && method === 'PUT') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    const body = await readJson<{ archiveQuestions?: boolean }>(req);
+    if (typeof body.archiveQuestions !== 'boolean') {
+      sendJson(res, 400, { error: 'archiveQuestions boolean required' });
+      return true;
+    }
+    sendJson(res, 200, updateUser(me.id, { archiveQuestions: body.archiveQuestions }));
+    return true;
+  }
+
   if (path === '/api/me/active-model' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
