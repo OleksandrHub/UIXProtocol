@@ -6,6 +6,8 @@ import { handleMe } from '../api/me';
 import { handleFiles } from '../api/files';
 import { handleQuestions } from '../api/questions';
 import { handleAdminUsers } from '../api/admin-users';
+import { handleDiag } from '../api/diag';
+import { handleFriends } from '../api/friends';
 
 export async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = req.url ?? '';
@@ -25,6 +27,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     if (await handleFiles(req, res, path, method)) return true;
     if (await handleQuestions(req, res, path, method)) return true;
     if (await handleAdminUsers(req, res, path, method)) return true;
+    if (await handleDiag(req, res, path, method)) return true;
+    if (await handleFriends(req, res, path, method)) return true;
 
     sendJson(res, 404, { error: 'not found' });
     return true;

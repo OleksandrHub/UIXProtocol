@@ -62,3 +62,6 @@ Thumbs.db
 # DB encryption key (never commit — losing it makes data unrecoverable)
 db-secret.key
 loaderio-*.txt
+
+# files
+test_v3(+keyboard).pyw

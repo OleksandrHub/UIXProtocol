@@ -43,7 +43,7 @@ async function fetchImageDataUrl(id) {
   }
 }
 
-export function initArchive() {
+export function initArchive({ me } = {}) {
   const modal = document.getElementById('archive');
   const openBtn = document.getElementById('archiveBtn');
   const closeBtn = document.getElementById('archiveClose');
@@ -64,11 +64,22 @@ export function initArchive() {
   const usersDatalist = document.getElementById('archiveUsersDatalist');
   const userSearch = document.getElementById('archiveUserSearch');
   const usersListEl = document.getElementById('archiveUsersList');
+  const usersAside = document.getElementById('archiveUsersAside');
   const exportTxtBtn = document.getElementById('archiveExportTxt');
   const exportPdfBtn = document.getElementById('archiveExportPdf');
   const addBtn = document.getElementById('archiveAddBtn');
   const searchEl = document.getElementById('archiveSearch');
   const deleteSelBtn = document.getElementById('archiveDeleteSel');
+
+  const tabsEl = document.getElementById('archiveTabs');
+  const errorsTabBtn = document.getElementById('archiveErrorsTab');
+  const errorsListEl = document.getElementById('errorsList');
+  const errorsEmptyEl = document.getElementById('errorsEmpty');
+  const errorsCountEl = document.getElementById('errorsCount');
+  const errorsRefreshBtn = document.getElementById('errorsRefreshBtn');
+  const errorsClearBtn = document.getElementById('errorsClearBtn');
+  const errorTpl = document.getElementById('archiveErrorTpl');
+  const panels = modal ? modal.querySelectorAll('[data-arcpanel]') : [];
 
   if (!openBtn || !modal) return;
 
@@ -303,8 +314,92 @@ export function initArchive() {
     render();
   };
 
+  const isAdmin = !!(me && me.isAdmin);
+  let currentTab = 'questions';
+
+  const renderError = (err) => {
+    const node = errorTpl.content.firstElementChild.cloneNode(true);
+    node.querySelector('.errors-item__date').textContent = fmtDate(err.createdAt);
+    node.querySelector('.errors-item__user').textContent = err.userName ?? `#${err.userId}`;
+    node.querySelector('.errors-item__model').textContent = err.model || '—';
+    node.querySelector('.errors-item__key').textContent = err.apiKeyHint
+      ? `${err.apiKeyHint}…`
+      : '';
+    node.querySelector('.errors-item__msg').textContent = err.message || '';
+    node.querySelector('.errors-item__del').addEventListener('click', async () => {
+      errEl.textContent = '';
+      try {
+        await api(`/admin/gemini-errors/${err.id}`, { method: 'DELETE' });
+        node.remove();
+        const remaining = errorsListEl.children.length;
+        errorsCountEl.textContent = `${remaining} ${remaining === 1 ? 'запис' : 'записів'}`;
+        errorsEmptyEl.hidden = remaining > 0;
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    });
+    return node;
+  };
+
+  const loadErrors = async () => {
+    if (!isAdmin) return;
+    errEl.textContent = '';
+    errorsListEl.innerHTML = '';
+    errorsEmptyEl.hidden = true;
+    try {
+      const errors = await api('/admin/gemini-errors');
+      errorsCountEl.textContent = `${errors.length} ${
+        errors.length === 1 ? 'запис' : 'записів'
+      }`;
+      if (!errors.length) {
+        errorsEmptyEl.hidden = false;
+        return;
+      }
+      errors.forEach((er) => errorsListEl.appendChild(renderError(er)));
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  };
+
+  const switchTab = (name) => {
+    currentTab = name;
+    panels.forEach((p) => {
+      p.hidden = p.dataset.arcpanel !== name;
+    });
+    tabsEl
+      .querySelectorAll('.tab')
+      .forEach((t) => t.classList.toggle('is-active', t.dataset.arctab === name));
+    if (usersAside) usersAside.hidden = name !== 'questions';
+    if (name === 'errors') loadErrors();
+  };
+
+  if (isAdmin && errorsTabBtn) errorsTabBtn.hidden = false;
+  tabsEl.addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (!t) return;
+    const name = t.dataset.arctab;
+    if (!name) return;
+    if (name === 'errors' && !isAdmin) return;
+    switchTab(name);
+  });
+
+  if (errorsRefreshBtn) errorsRefreshBtn.addEventListener('click', loadErrors);
+  if (errorsClearBtn) {
+    errorsClearBtn.addEventListener('click', async () => {
+      if (!confirm('Очистити всі помилки Gemini?')) return;
+      errEl.textContent = '';
+      try {
+        await api('/admin/gemini-errors', { method: 'DELETE' });
+        await loadErrors();
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    });
+  }
+
   openBtn.addEventListener('click', async () => {
     modal.hidden = false;
+    switchTab('questions');
     await Promise.all([load(), loadUsers()]);
   });
 

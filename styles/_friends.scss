@@ -1,0 +1,236 @@
+// ===== Friends settings panel =====
+
+.friends-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.friends-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  h4 {
+    margin: 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(0, 0, 0, 0.55);
+  }
+}
+
+.friends-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+
+  input {
+    flex: 1 1 auto;
+  }
+}
+
+.friends-error {
+  color: #c0392b;
+  font-size: 12px;
+  min-height: 1em;
+}
+
+.friends-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friends-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+
+  > span {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  button {
+    flex: 0 0 auto;
+  }
+
+  .is-primary {
+    background: #2a6df4;
+    color: #fff;
+    border-color: #2a6df4;
+  }
+}
+
+.friends-empty {
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+}
+
+.friends-howto {
+  margin-top: 20px;
+  padding: 12px 14px;
+  background: rgba(42, 109, 244, 0.06);
+  border-left: 3px solid #2a6df4;
+  border-radius: 4px;
+
+  h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #2a6df4;
+  }
+
+  ol {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  li + li {
+    margin-top: 4px;
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+    background: #fff;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.1);
+    font-family: inherit;
+    font-size: 11px;
+  }
+}
+
+.friends-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+  font-style: italic;
+}
+
+// ===== Variants bar (Alt+R) =====
+
+.variants-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+
+  select {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 4px 6px;
+  }
+
+  button {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+
+    &:hover:not(:disabled) {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+}
+
+// ===== Friend toggle button (Д) =====
+// Uses the same --screenshot-* CSS vars as the S button via the
+// shared `.gemini-panel button` selector — appearance settings affect both.
+// When friend mode is active we override background / color to make the
+// active state obvious without relying on toasts.
+
+#friendToggleBtn.is-active {
+  background: var(--friend-active-bg, #2a6df4) !important;
+  color: var(--friend-active-color, #fff) !important;
+}
+
+// ===== Friend chat modal =====
+
+.friend-chat__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  h2 {
+    margin: 0;
+    flex: 0 0 auto;
+  }
+}
+
+.friend-chat__from {
+  flex: 1 1 auto;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+}
+
+.friend-chat__close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+}
+
+.friend-chat__image-wrap {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+
+.friend-chat__image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.friend-chat__reply {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  textarea {
+    width: 100%;
+    resize: vertical;
+    font-family: inherit;
+  }
+}
+
+.friend-chat__status {
+  min-height: 1em;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+  margin: 6px 0;
+}
