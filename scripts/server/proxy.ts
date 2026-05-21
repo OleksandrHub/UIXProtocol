@@ -10,6 +10,7 @@ import {
   SESSION_COOKIE_NAME,
 } from '../shared/constants';
 import { getSessionUserId, parseCookie } from '../auth/session';
+import { pickRelay, reportRelayFailure } from './relay-pool';
 import type { ProxyOpts } from '../shared/types';
 
 function rewriteUrls(text: string, targetHost: string): string {
@@ -181,15 +182,7 @@ function rewriteViewport(html: string): string {
 }
 
 function pickForwardProxy(userId: number | null): URL | null {
-  const list = environment.forwardProxies;
-  if (!list.length || userId == null) return null;
-  const raw = list[Math.abs(userId) % list.length];
-  if (!raw) return null;
-  try {
-    return new URL(raw);
-  } catch {
-    return null;
-  }
+  return pickRelay(userId);
 }
 
 function performProxy(
@@ -353,6 +346,7 @@ function performProxy(
 
   proxyReq.on('error', (err) => {
     console.error('[Proxy Error]', err.message);
+    if (fwdProxy) reportRelayFailure(fwdProxy, err.message);
     if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
     res.end('Proxy error: ' + err.message);
   });
