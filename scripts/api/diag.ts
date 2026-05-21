@@ -5,6 +5,7 @@ import { URL } from 'node:url';
 
 import { sendJson } from '../api/helpers';
 import { environment } from '../../environments/environment';
+import { getRelayStatuses } from '../server/relay-pool';
 
 const IP_PROBE = 'https://api.ipify.org?format=json';
 let cachedServerIp: { ip: string; at: number } | null = null;
@@ -118,6 +119,11 @@ export async function handleDiag(
     } catch (e) {
       sendJson(res, 502, { error: (e as Error).message });
     }
+    return true;
+  }
+
+  if (path === '/api/_diag/relays' && method === 'GET') {
+    sendJson(res, 200, { relays: getRelayStatuses() });
     return true;
   }
 
