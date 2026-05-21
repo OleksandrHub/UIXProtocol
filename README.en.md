@@ -3,6 +3,22 @@
 A lightweight reverse proxy with multi-user authentication and an optional Gemini-powered AI helper. Single Node process, single port, no frameworks.
 
 > Ukrainian version: [README.md](README.md)
+>
+> ⚠ **This English doc is out of date** for recent features. The Ukrainian
+> [README.md](README.md) is the source of truth and covers:
+> - Multi-laptop forward-proxy / IP rotation (`forwardProxies`, SSH reverse
+>   tunnel `ssh -R 8787:localhost:8787 root@<central>`, cloudflared/ngrok
+>   alternatives, `npm run start:laptop-proxy`)
+> - Friend-help mode (Alt+F / `Д` button, SSE real-time chat, settings tab
+>   "Друзі", endpoints `/api/me/friends/*` + `/api/me/friends/stream`)
+> - Appearance variants for Gemini answers (Alt+R, multiple named presets
+>   inside `user_appearance.data`)
+> - Gemini now uses **only the active model** (no fallback to other enabled
+>   models — fallback stays between API keys only)
+> - Customizable colors for the friend-toggle button's active state
+>
+> Until this English file is synced, refer to the Ukrainian README for the
+> authoritative architecture & API descriptions.
 
 ## Simple start
 
