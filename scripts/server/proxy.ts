@@ -268,6 +268,7 @@ function performProxy(
       incomingHeaders['x-relay-secret'] = environment.forwardProxySecret;
     }
   } else {
+    console.warn(`Proxy work on central server without`);
     outboundHostname = targetUrl.hostname;
     outboundPort = TARGET.startsWith('https:') ? 443 : 80;
     outboundPath = targetUrl.pathname + targetUrl.search;
