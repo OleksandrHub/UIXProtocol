@@ -76,7 +76,7 @@ function canvasToBlobJpeg(canvas) {
         resolve(blob);
       },
       'image/jpeg',
-      0.8,
+      0.92,
     );
   });
 }
