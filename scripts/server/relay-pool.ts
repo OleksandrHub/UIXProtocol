@@ -16,7 +16,7 @@ interface RelayStatus {
 }
 
 const status: RelayStatus[] = [];
-let started = false;
+let initPromise: Promise<void> | null = null;
 
 function parseUrl(raw: string): URL | null {
   try {
@@ -57,32 +57,34 @@ async function checkAll(): Promise<void> {
   await Promise.all(status.map(probeOne));
 }
 
-function init(): void {
-  if (started) return;
-  started = true;
-  for (const raw of environment.forwardProxies) {
-    const url = parseUrl(raw);
-    if (!url) {
-      console.warn(`[RelayPool] skipping invalid relay URL: ${raw}`);
-      continue;
+export function initRelayPool(): Promise<void> {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    for (const raw of environment.forwardProxies) {
+      const url = parseUrl(raw);
+      if (!url) {
+        console.warn(`[RelayPool] skipping invalid relay URL: ${raw}`);
+        continue;
+      }
+      status.push({
+        url,
+        raw,
+        healthy: false,
+        lastCheckedAt: 0,
+        lastError: null,
+      });
     }
-    status.push({
-      url,
-      raw,
-      healthy: true,
-      lastCheckedAt: 0,
-      lastError: null,
-    });
-  }
-  if (status.length === 0) return;
-  void checkAll();
-  setInterval(() => {
-    void checkAll();
-  }, HEALTH_CHECK_INTERVAL_MS).unref();
+    if (status.length === 0) return;
+    await checkAll();
+    setInterval(() => {
+      void checkAll();
+    }, HEALTH_CHECK_INTERVAL_MS).unref();
+  })();
+  return initPromise;
 }
 
 export function pickRelay(userId: number | null): URL | null {
-  init();
+  if (!initPromise) void initRelayPool();
   if (userId == null || status.length === 0) return null;
   const startIdx = Math.abs(userId) % status.length;
   for (let i = 0; i < status.length; i++) {
@@ -94,7 +96,7 @@ export function pickRelay(userId: number | null): URL | null {
 }
 
 export function reportRelayFailure(target: URL, error: string): void {
-  init();
+  if (!initPromise) void initRelayPool();
   for (const s of status) {
     if (s.url.host !== target.host) continue;
     if (s.healthy) {
@@ -118,7 +120,7 @@ export interface PublicRelayStatus {
 }
 
 export function getRelayStatuses(): PublicRelayStatus[] {
-  init();
+  if (!initPromise) void initRelayPool();
   return status.map((s) => ({
     url: s.raw,
     healthy: s.healthy,

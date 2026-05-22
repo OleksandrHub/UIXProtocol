@@ -2,7 +2,7 @@ export const environment = {
   production: true,
   defaultTarget: 'https://dl.tntu.edu.ua',
   port: 3000,
-  forwardProxies: ['http://localhost:8787'] as string[],
+  forwardProxies: ['http://localhost:8787', 'http://localhost:8788', 'http://localhost:8789'] as string[],
   forwardProxySecret: process.env.LAPTOP_PROXY_SECRET ?? '',
   sessionTtlMs: 60 * 60 * 1000,
   iframePermissions: [
