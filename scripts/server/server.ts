@@ -10,6 +10,7 @@ import { environment } from '../../environments/environment';
 import { PREVIEW_RE, PUBLIC_DIR } from '../shared/constants';
 import { safeJsPath, serveFile } from '../server/static';
 import { proxyForUser, proxyHandle } from '../server/proxy';
+import { initRelayPool } from '../server/relay-pool';
 
 const LOADERIO_TOKEN = 'loaderio-213257cff0bbdbf549a9fff9d55a3d2b';
 const LOADERIO_FILE = path.join(process.cwd(), `${LOADERIO_TOKEN}.txt`);
@@ -41,8 +42,7 @@ function serveLoaderioVerification(reqPath: string, res: http.ServerResponse): b
   return true;
 }
 
-http
-  .createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
     const reqPath = (req.url ?? '/').split('?')[0] ?? '/';
 
     if (serveLoaderioVerification(reqPath, res)) return;
@@ -111,8 +111,11 @@ http
     }
 
     proxyHandle(req, res);
-  })
-  .listen(environment.port, '0.0.0.0', () => {
+  });
+
+void (async () => {
+  await initRelayPool();
+  server.listen(environment.port, '0.0.0.0', () => {
     const port = environment.port;
     console.log(`✅  Backend listening on 0.0.0.0:${port}`);
     console.log(`    Local:    http://localhost:${port}`);
@@ -123,3 +126,4 @@ http
       if (n > 0) console.log(`[cleanup] pruned ${n} old gemini_errors`);
     }, 24 * 60 * 60 * 1000).unref();
   });
+})();
