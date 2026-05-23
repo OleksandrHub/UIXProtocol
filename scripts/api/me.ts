@@ -101,6 +101,18 @@ export async function handleMe(
     return true;
   }
 
+  if (path === '/api/me/dev-tools' && method === 'PUT') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    const body = await readJson<{ devTools?: boolean }>(req);
+    if (typeof body.devTools !== 'boolean') {
+      sendJson(res, 400, { error: 'devTools boolean required' });
+      return true;
+    }
+    sendJson(res, 200, updateUser(me.id, { devTools: body.devTools }));
+    return true;
+  }
+
   if (path === '/api/me/active-model' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;

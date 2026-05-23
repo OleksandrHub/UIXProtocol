@@ -42,6 +42,7 @@ function rowToUser(row: UserRow): User {
     enabledModels: safeParseArray<string>(row.enabled_models),
     activeModel: row.active_model ?? '',
     archiveQuestions: row.archive_questions !== 0,
+    devTools: row.dev_tools !== 0,
   };
 }
 
@@ -110,6 +111,10 @@ export function updateUser(id: number, input: UpdateUserInput): User | null {
   if (input.archiveQuestions !== undefined) {
     sets.push('archive_questions = ?');
     params.push(input.archiveQuestions ? 1 : 0);
+  }
+  if (input.devTools !== undefined) {
+    sets.push('dev_tools = ?');
+    params.push(input.devTools ? 1 : 0);
   }
   if (!sets.length) return getUserById(id);
   params.push(id);

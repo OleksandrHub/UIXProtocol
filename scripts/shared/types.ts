@@ -19,6 +19,7 @@ export interface UpdateUserInput {
   enabledModels?: string[];
   activeModel?: string;
   archiveQuestions?: boolean;
+  devTools?: boolean;
 }
 
 export interface User {
@@ -32,6 +33,7 @@ export interface User {
   enabledModels: string[];
   activeModel: string;
   archiveQuestions: boolean;
+  devTools: boolean;
 }
 
 export interface UserFile extends UserFileMeta {
@@ -101,6 +103,7 @@ export interface UserRow {
   enabled_models: string;
   active_model: string;
   archive_questions: number;
+  dev_tools: number;
 }
 
 export interface GeminiErrorRow {
@@ -192,4 +195,5 @@ export interface ProxyOpts {
   sendCookies?: boolean;
   stripSetCookie?: boolean;
   setPreviewCookie?: number;
+  devTools?: boolean;
 }

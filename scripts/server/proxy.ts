@@ -13,35 +13,44 @@ import {
 } from '../shared/constants';
 import { getSessionUserId, parseCookie } from '../auth/session';
 import { pickRelay, reportRelayFailure } from './relay-pool';
+import { HostStripStream } from './stream-rewrite';
 import type { ProxyOpts } from '../shared/types';
 
-const URL_RE = /https?:\/\/[^\s"'<>`\\)]+/gi;
-const PROXY_PREFIX_SLASH = `${PROXY_PREFIX}/`;
-const STRIP_HOST_RE = /^https?:\/\/[^/]+/;
 
 function rewriteAllUrls(text: string, targetHost: string): string {
-  return text.replace(URL_RE, (match, offset: number, full: string) => {
-    if (
-      offset >= PROXY_PREFIX_SLASH.length &&
-      full.slice(offset - PROXY_PREFIX_SLASH.length, offset) === PROXY_PREFIX_SLASH
-    ) {
-      return match;
-    }
-    const lower = match.toLowerCase();
-    const hostStart = lower.indexOf('://') + 3;
-    const hostEnd = lower.indexOf('/', hostStart);
-    const host = hostEnd < 0 ? lower.slice(hostStart) : lower.slice(hostStart, hostEnd);
-    if (host === targetHost.toLowerCase()) {
-      return match.replace(STRIP_HOST_RE, '');
-    }
-    return `${PROXY_PREFIX_SLASH}${match}`;
-  });
+  const tHostLower = targetHost.toLowerCase();
+  const absRe = new RegExp(`https?://${tHostLower.replace(/\./g, '\\.')}`, 'gi');
+  const step1 = text.replace(absRe, '');
+  const protoRelRe = new RegExp(`//${tHostLower.replace(/\./g, '\\.')}`, 'gi');
+  return step1.replace(protoRelRe, '');
 }
 
 function rewriteLocationToProxy(value: string): string {
-  if (/^https?:\/\//i.test(value)) return `${PROXY_PREFIX}/${value}`;
-  if (value.startsWith('//')) return `${PROXY_PREFIX}/https:${value}`;
+
   return value;
+}
+
+function buildOutboundReferer(
+  raw: string | string[] | undefined,
+  target: string,
+  targetHost: string
+): string {
+  if (typeof raw !== 'string' || !raw) return target;
+  let p: string;
+  try {
+    const u = new URL(raw, 'http://x');
+    p = u.pathname + u.search;
+  } catch {
+    return target;
+  }
+  if (p.startsWith(`${PROXY_PREFIX}/`)) p = p.slice(PROXY_PREFIX.length);
+  else if (p === PROXY_PREFIX) p = '/';
+  const cross = p.match(/^\/(https?:\/\/[^/]+)(\/.*)?(\?.*)?$/i);
+  if (cross) return cross[1]! + (cross[2] || '/') + (cross[3] || '');
+  const base = `https://${targetHost}`;
+  if (p.startsWith(base)) return p;
+  if (!p.startsWith('/')) p = '/' + p;
+  return base + p;
 }
 
 function normalizeIp(ip: string | undefined): string {
@@ -70,11 +79,13 @@ const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
 
 const KEEP_ACTIVE_SCRIPT = `<script data-uix-keepactive>(function(){try{
-var W=window,D=document,N=navigator;
+var W=window,D=document;
 W.__uixKeepActive=true;
 var def=function(o,k,v){try{Object.defineProperty(o,k,{configurable:true,get:function(){return v;}});}catch(e){}};
 
-// Page Visibility API + vendor-prefixed variants
+// Only fake "page is visible" — this is what stops browsers from throttling
+// background timers. Vendor-prefixed variants are kept for older sites that
+// poll them directly.
 def(Document.prototype,'hidden',false);
 def(Document.prototype,'webkitHidden',false);
 def(Document.prototype,'mozHidden',false);
@@ -84,61 +95,15 @@ def(Document.prototype,'webkitVisibilityState','visible');
 def(Document.prototype,'mozVisibilityState','visible');
 def(Document.prototype,'msVisibilityState','visible');
 
-// Page Lifecycle API
-def(Document.prototype,'wasDiscarded',false);
-def(Document.prototype,'prerendering',false);
-try{def(Object.getPrototypeOf(D)||Document.prototype,'visibilityState','visible');}catch(e){}
-
-// Focus
-try{D.hasFocus=function(){return true;};}catch(e){}
-
-// navigator.userActivation — many sites gate features behind it
-try{
-  var fakeUA={hasBeenActive:true,isActive:true};
-  Object.defineProperty(N,'userActivation',{configurable:true,get:function(){return fakeUA;}});
-}catch(e){}
-
-// Always report online
-try{Object.defineProperty(N,'onLine',{configurable:true,get:function(){return true;}});}catch(e){}
-
-// Block events that signal becoming inactive
-var BLOCK={
-  visibilitychange:1,webkitvisibilitychange:1,mozvisibilitychange:1,msvisibilitychange:1,
-  blur:1,pagehide:1,freeze:1,offline:1
-};
-var isTop=function(t){return t===D||t===W||t===W.frameElement;};
+// Block only the Page Lifecycle freeze event so the browser doesn't discard
+// the iframe when the tab is backgrounded. visibilitychange / blur / pagehide
+// / offline keep firing — those are real-user signals Cloudflare expects to
+// see, and suppressing them is a bot tell.
 var origAdd=EventTarget.prototype.addEventListener;
 EventTarget.prototype.addEventListener=function(type,listener,options){
-  if(typeof type==='string'&&BLOCK[type.toLowerCase()]&&isTop(this))return;
+  if(typeof type==='string'&&type.toLowerCase()==='freeze'&&(this===D||this===W))return;
   return origAdd.call(this,type,listener,options);
 };
-var origRem=EventTarget.prototype.removeEventListener;
-EventTarget.prototype.removeEventListener=function(type,listener,options){
-  if(typeof type==='string'&&BLOCK[type.toLowerCase()]&&isTop(this))return;
-  return origRem.call(this,type,listener,options);
-};
-var origDispatch=EventTarget.prototype.dispatchEvent;
-EventTarget.prototype.dispatchEvent=function(ev){
-  if(ev&&typeof ev.type==='string'&&BLOCK[ev.type.toLowerCase()]&&isTop(this))return true;
-  return origDispatch.call(this,ev);
-};
-
-// on* event-handler properties
-['onvisibilitychange','onwebkitvisibilitychange','onmozvisibilitychange','onmsvisibilitychange',
- 'onblur','onpagehide','onfreeze','onoffline'].forEach(function(p){
-  try{Object.defineProperty(D,p,{configurable:true,get:function(){return null;},set:function(){}});}catch(e){}
-  try{Object.defineProperty(W,p,{configurable:true,get:function(){return null;},set:function(){}});}catch(e){}
-});
-
-// Emit "visible" + "focus" once after DOM is ready so sites that subscribed early
-// see the page in an active state.
-var fire=function(){
-  try{var ev=new Event('visibilitychange');origDispatch.call(D,ev);}catch(e){}
-  try{var ev2=new Event('focus');origDispatch.call(W,ev2);}catch(e){}
-  try{var ev3=new Event('pageshow');origDispatch.call(W,ev3);}catch(e){}
-};
-if(D.readyState==='loading')D.addEventListener('DOMContentLoaded',fire,{once:true});
-else setTimeout(fire,0);
 }catch(e){}})();</script>`;
 
 
@@ -169,88 +134,47 @@ fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return
 }).catch(function(e){console.warn(TAG+' relay-ip впав (relay не налаштований чи недоступний):',S,e.message);});
 })();</script>`;
 
-const RUNTIME_URL_REWRITE_SCRIPT = `<script data-uix-urlhook>(function(){try{
-var origin=location.origin;
-function rewrite(u){
-  if(typeof u!=='string'||!u)return u;
-  var c=u.charAt(0);
-  if(c==='#'||c==='?')return u;
-  if(/^[a-z][a-z0-9+.-]*:/i.test(u)&&!/^https?:/i.test(u))return u;
-  try{
-    var url=new URL(u,location.href);
-    if(url.protocol!=='http:'&&url.protocol!=='https:')return u;
-    if(url.origin===origin)return u;
-    return '/_p/'+url.href;
-  }catch(e){return u;}
-}
-function hookProp(proto,prop){
-  try{
-    var d=Object.getOwnPropertyDescriptor(proto,prop);
-    if(!d||!d.set)return;
-    var origSet=d.set,origGet=d.get;
-    Object.defineProperty(proto,prop,{
-      configurable:true,enumerable:d.enumerable,
-      get:function(){return origGet?origGet.call(this):undefined;},
-      set:function(v){origSet.call(this,rewrite(v));}
-    });
-  }catch(e){}
-}
-hookProp(HTMLScriptElement.prototype,'src');
-hookProp(HTMLLinkElement.prototype,'href');
-hookProp(HTMLImageElement.prototype,'src');
-hookProp(HTMLIFrameElement.prototype,'src');
-if(typeof HTMLSourceElement!=='undefined')hookProp(HTMLSourceElement.prototype,'src');
-if(typeof HTMLMediaElement!=='undefined')hookProp(HTMLMediaElement.prototype,'src');
-try{
-  var origSetAttr=Element.prototype.setAttribute;
-  Element.prototype.setAttribute=function(name,value){
-    try{
-      var ln=String(name).toLowerCase();
-      var tn=this.tagName?this.tagName.toLowerCase():'';
-      if(ln==='src'&&(tn==='script'||tn==='img'||tn==='iframe'||tn==='source'||tn==='audio'||tn==='video')){
-        value=rewrite(value);
-      }else if(ln==='href'&&tn==='link'){
-        value=rewrite(value);
-      }
-    }catch(e){}
-    return origSetAttr.call(this,name,value);
-  };
-}catch(e){}
-try{
-  if(typeof window.fetch==='function'){
-    var origFetch=window.fetch;
-    window.fetch=function(input,init){
-      try{
-        if(typeof input==='string')input=rewrite(input);
-      }catch(e){}
-      return origFetch.call(this,input,init);
-    };
-  }
-}catch(e){}
-try{
-  var origOpen=XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open=function(method,url){
-    var args=Array.prototype.slice.call(arguments);
-    try{args[1]=rewrite(url);}catch(e){}
-    return origOpen.apply(this,args);
-  };
-}catch(e){}
+
+const TURNSTILE_STUB_SCRIPT = `<script data-uix-turnstile-stub>(function(){try{
+var nextId=0;
+var stub={
+  render:function(){return 'uix-stub-'+(++nextId);},
+  reset:function(){},
+  remove:function(){},
+  getResponse:function(){return '';},
+  execute:function(){},
+  isExpired:function(){return false;},
+  ready:function(cb){if(typeof cb==='function')setTimeout(cb,0);}
+};
+try{Object.defineProperty(window,'turnstile',{value:stub,writable:false,configurable:false});}catch(e){window.turnstile=stub;}
 }catch(e){}})();</script>`;
 
 const VIEWPORT_RE = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
 const HEAD_RE = /<head\b([^>]*)>/i;
-const INJECTED_HEAD_PREFIX = KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT + RUNTIME_URL_REWRITE_SCRIPT;
+const INTEGRITY_ATTR_RE = /\s+integrity\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+const CROSSORIGIN_ATTR_RE = /\s+crossorigin\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
 
-function injectHtmlHelpers(html: string): string {
+const TURNSTILE_SCRIPT_TAG_RE = /<script\b[^>]*\bsrc\s*=\s*["'][^"']*challenges\.cloudflare\.com\/turnstile\/[^"']*["'][^>]*>\s*<\/script>/gi;
+
+function injectHtmlHelpers(html: string, devTools: boolean): string {
+  // Diagnostic injections (IP probes + Turnstile stub) are gated behind the
+  // per-user dev-tools flag. Default is OFF: regular users get a clean console
+  // and Cloudflare Turnstile widgets run their real challenge so the target
+  // site's security check actually passes.
+  const prefix = devTools
+    ? TURNSTILE_STUB_SCRIPT + KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT
+    : KEEP_ACTIVE_SCRIPT;
   const hasViewport = VIEWPORT_RE.test(html);
   let body = hasViewport ? html.replace(VIEWPORT_RE, PERMISSIVE_VIEWPORT) : html;
+  body = body.replace(INTEGRITY_ATTR_RE, '').replace(CROSSORIGIN_ATTR_RE, '');
+  if (devTools) body = body.replace(TURNSTILE_SCRIPT_TAG_RE, '');
   if (HEAD_RE.test(body)) {
     const injection = hasViewport
-      ? `<head$1>${INJECTED_HEAD_PREFIX}`
-      : `<head$1>${INJECTED_HEAD_PREFIX}${PERMISSIVE_VIEWPORT}`;
+      ? `<head$1>${prefix}`
+      : `<head$1>${prefix}${PERMISSIVE_VIEWPORT}`;
     return body.replace(HEAD_RE, injection);
   }
-  return INJECTED_HEAD_PREFIX + body;
+  return prefix + body;
 }
 
 function pickForwardProxy(userId: number | null): URL | null {
@@ -265,6 +189,22 @@ function performProxy(
   userId: number | null,
   opts: ProxyOpts = {}
 ): void {
+  // Service Worker registration always carries the `Service-Worker: script`
+  // request header. If we proxied the real SW, the browser would register it
+  // against our origin, where it would intercept future navigation and cache
+  // target-bound responses on the wrong host. Returning an empty JS lets
+  // `navigator.serviceWorker.register()` resolve cleanly while the SW does
+  // nothing (no fetch handler, no caching, no install).
+  if (req.headers['service-worker'] === 'script') {
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Service-Worker-Allowed': '/',
+    });
+    res.end('// uix: neutralised service worker\n');
+    return;
+  }
+
   const crossOrigin = pathOnly.match(/^\/(https?:\/\/[^/]+)(\/.*)?$/i);
   if (crossOrigin) {
     targetRaw = crossOrigin[1]!;
@@ -306,12 +246,11 @@ function performProxy(
     ...req.headers,
     host: targetHost,
     origin: TARGET,
-    referer:
-      TARGET +
-      (req.headers['referer'] ? new URL(req.headers['referer'], 'http://x').pathname : ''),
+    referer: buildOutboundReferer(req.headers['referer'], TARGET, targetHost),
   };
   if (cleanedCookie) incomingHeaders['cookie'] = cleanedCookie;
   else delete incomingHeaders['cookie'];
+  incomingHeaders['accept-encoding'] = 'gzip, deflate, br';
   if (fwd.xff) incomingHeaders['x-forwarded-for'] = fwd.xff;
   if (fwd.realIp) incomingHeaders['x-real-ip'] = fwd.realIp;
   if (fwd.forwarded) incomingHeaders['forwarded'] = fwd.forwarded;
@@ -399,36 +338,54 @@ function performProxy(
         .join(', ');
 
       const ct = String(proxyRes.headers['content-type'] ?? '');
-      const needsRewrite = ct.includes('text/html') || ct.includes('javascript');
+      const isHtml = ct.includes('text/html');
+      const isJs = ct.includes('javascript');
 
-      if (needsRewrite) {
-        const enc = String(proxyRes.headers['content-encoding'] ?? '').toLowerCase();
-        let stream: Readable = proxyRes;
-        if (enc === 'gzip') stream = proxyRes.pipe(zlib.createGunzip());
-        else if (enc === 'deflate') stream = proxyRes.pipe(zlib.createInflate());
-        else if (enc === 'br') stream = proxyRes.pipe(zlib.createBrotliDecompress());
-        const chunks: Buffer[] = [];
-        stream.on('data', (c: Buffer) => chunks.push(c));
-        stream.on('end', () => {
-          let text = rewriteAllUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
-          if (ct.includes('text/html')) {
-            text = injectHtmlHelpers(text);
-          }
-          const body = Buffer.from(text, 'utf-8');
-          delete headers['content-encoding'];
-          headers['content-length'] = body.length;
-          res.writeHead(proxyRes.statusCode ?? 502, headers);
-          res.end(body);
-        });
-        stream.on('error', (err: Error) => {
-          console.error('[Proxy decode error]', err.message);
-          if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
-          res.end('decode error: ' + err.message);
-        });
-      } else {
+      if (!isHtml && !isJs) {
         res.writeHead(proxyRes.statusCode ?? 502, headers);
         proxyRes.pipe(res);
+        return;
       }
+
+      const enc = String(proxyRes.headers['content-encoding'] ?? '').toLowerCase();
+      let stream: Readable = proxyRes;
+      if (enc === 'gzip') stream = proxyRes.pipe(zlib.createGunzip());
+      else if (enc === 'deflate') stream = proxyRes.pipe(zlib.createInflate());
+      else if (enc === 'br') stream = proxyRes.pipe(zlib.createBrotliDecompress());
+
+      const onDecodeError = (err: Error): void => {
+        console.error('[Proxy decode error]', err.message);
+        if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+        res.end('decode error: ' + err.message);
+      };
+      stream.on('error', onDecodeError);
+
+      if (isJs) {
+        // JS responses can be megabytes (Moodle/Angular bundles). Streaming
+        // through HostStripStream avoids buffering the whole file: chunks are
+        // rewritten and forwarded as they arrive, with a small overlap to
+        // catch matches that straddle a chunk boundary.
+        delete headers['content-encoding'];
+        delete headers['content-length'];
+        res.writeHead(proxyRes.statusCode ?? 502, headers);
+        stream.pipe(new HostStripStream(targetHost)).pipe(res);
+        return;
+      }
+
+      // HTML still buffers: we need the full document to find <head> and
+      // inject viewport / activity / (optional) dev-tools scripts. HTML is
+      // typically 10-200KB so the buffering cost is negligible.
+      const chunks: Buffer[] = [];
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => {
+        let text = rewriteAllUrls(Buffer.concat(chunks).toString('utf-8'), targetHost);
+        text = injectHtmlHelpers(text, opts.devTools === true);
+        const body = Buffer.from(text, 'utf-8');
+        delete headers['content-encoding'];
+        headers['content-length'] = body.length;
+        res.writeHead(proxyRes.statusCode ?? 502, headers);
+        res.end(body);
+      });
     }
   );
 
@@ -461,7 +418,9 @@ export function proxyForUser(
     res.end('No target URL set for this user');
     return;
   }
-  performProxy(req, res, target, reqPath, userId, preview ? { setPreviewCookie: userId } : {});
+  const opts: ProxyOpts = { devTools: user.devTools };
+  if (preview) opts.setPreviewCookie = userId;
+  performProxy(req, res, target, reqPath, userId, opts);
 }
 
 function getCookiePreviewId(req: http.IncomingMessage): number | null {
