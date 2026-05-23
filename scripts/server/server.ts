@@ -60,14 +60,25 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (reqPath.startsWith('/js/')) {
-      const target = safeJsPath(reqPath);
-      if (!target) {
-        res.writeHead(404);
-        res.end();
+      const ref = req.headers['referer'];
+      let fromIframe = false;
+      if (typeof ref === 'string') {
+        try {
+          fromIframe = /^\/_p\/\d+(\/|$)/.test(new URL(ref).pathname);
+        } catch {
+          fromIframe = false;
+        }
+      }
+      if (!fromIframe) {
+        const target = safeJsPath(reqPath);
+        if (!target) {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
+        serveFile(res, target);
         return;
       }
-      serveFile(res, target);
-      return;
     }
 
     const previewMatch = reqPath.match(PREVIEW_RE);
