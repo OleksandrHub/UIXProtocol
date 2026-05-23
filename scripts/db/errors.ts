@@ -1,12 +1,9 @@
 import { decrypt, encrypt } from '../db/cipher';
 import { db } from '../db/connection';
-import type { GeminiError, GeminiErrorRow } from '../shared/types';
+import { GEMINI_ERROR_RETAIN_MS } from '../shared/constants';
+import type { GeminiError, JoinedGeminiErrorRow } from '../shared/types';
 
-interface JoinedRow extends GeminiErrorRow {
-  user_name: string | null;
-}
-
-function rowToError(row: JoinedRow): GeminiError {
+function rowToError(row: JoinedGeminiErrorRow): GeminiError {
   return {
     id: row.id,
     userId: row.user_id,
@@ -46,7 +43,7 @@ export function listGeminiErrors(limit = 200): GeminiError[] {
        ORDER BY e.id DESC
        LIMIT ?`,
     )
-    .all(Math.max(1, Math.min(1000, limit))) as JoinedRow[];
+    .all(Math.max(1, Math.min(1000, limit))) as JoinedGeminiErrorRow[];
   return rows.map(rowToError);
 }
 
@@ -60,10 +57,8 @@ export function clearGeminiErrors(): number {
   return info.changes;
 }
 
-const RETAIN_MS = 30 * 24 * 60 * 60 * 1000;
-
 export function pruneOldGeminiErrors(): number {
-  const cutoff = Date.now() - RETAIN_MS;
+  const cutoff = Date.now() - GEMINI_ERROR_RETAIN_MS;
   const info = db.prepare('DELETE FROM gemini_errors WHERE created_at < ?').run(cutoff);
   return info.changes;
 }

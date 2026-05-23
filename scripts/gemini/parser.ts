@@ -1,17 +1,5 @@
+import { QDATA_RE } from '../shared/constants';
 import type { ParsedQuestion } from '../shared/types';
-
-// A server-controlled instruction appended after the (user-customizable)
-// prompt. It asks the model for an extra machine-readable block so we can
-// archive every question/options/correct answer without changing the short
-// answer the overlay shows.
-export const STRUCTURED_SUFFIX = `
-
----
-ALSO, on a separate final line, output exactly one machine-readable block listing EVERY question visible on the screen as a JSON array:
-[[QDATA]][{"question":"<full question text>","options":["<choice 1>","<choice 2>"],"correct":"<the correct answer text or label>"}][[/QDATA]]
-Rules: valid minified JSON ARRAY, one object per question in screen order, no markdown, escape inner quotes, "options" is [] if there are no listed choices, include ALL questions if there are several, always output the block even if unsure.`;
-
-const QDATA_RE = /\[\[QDATA\]\]\s*([\s\S]*?)\s*\[\[\/QDATA\]\]/i;
 
 function stripStructured(text: string): string {
   return text.replace(QDATA_RE, '').trim();

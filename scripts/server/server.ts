@@ -8,15 +8,12 @@ import { handleApi } from '../api/router';
 import { getSessionUserId } from '../auth/session';
 import { getUserById, pruneOldGeminiErrors } from '../db';
 import { environment } from '../../environments/environment';
-import { PREVIEW_RE, PUBLIC_DIR } from '../shared/constants';
+import { LOADERIO_FILE, LOADERIO_TOKEN, PREVIEW_RE, PUBLIC_DIR } from '../shared/constants';
 import { safeJsPath, serveFile } from '../server/static';
 import { proxyForUser, proxyHandle } from '../server/proxy';
 import { initRelayPool } from '../server/relay-pool';
 import { ensureSelfSignedCert } from '../server/tls';
 import { handleUpgrade } from '../server/websocket';
-
-const LOADERIO_TOKEN = 'loaderio-213257cff0bbdbf549a9fff9d55a3d2b';
-const LOADERIO_FILE = path.join(process.cwd(), `${LOADERIO_TOKEN}.txt`);
 
 function serveLoaderioVerification(reqPath: string, res: http.ServerResponse): boolean {
   if (

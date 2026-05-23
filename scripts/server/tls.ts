@@ -1,10 +1,7 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 
-const TLS_DIR = path.join(process.cwd(), 'tls');
-const CERT_PATH = path.join(TLS_DIR, 'cert.pem');
-const KEY_PATH = path.join(TLS_DIR, 'key.pem');
+import { CERT_PATH, KEY_PATH, TLS_DIR } from '../shared/constants';
 
 export function ensureSelfSignedCert(): { key: Buffer; cert: Buffer } | null {
   try {

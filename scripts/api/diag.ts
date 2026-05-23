@@ -6,16 +6,10 @@ import { URL } from 'node:url';
 import { sendJson } from '../api/helpers';
 import { environment } from '../../environments/environment';
 import { getRelayStatuses } from '../server/relay-pool';
+import { IP_PROBE, SERVER_IP_CACHE_MS } from '../shared/constants';
+import type { ProbeResult } from '../shared/types';
 
-const IP_PROBE = 'https://api.ipify.org?format=json';
 let cachedServerIp: { ip: string; at: number } | null = null;
-const CACHE_MS = 60 * 60 * 1000;
-
-interface ProbeResult {
-  ip: string;
-  status: number;
-  body: string;
-}
 
 function probe(headers: Record<string, string> = {}): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
@@ -42,7 +36,7 @@ function probe(headers: Record<string, string> = {}): Promise<ProbeResult> {
 }
 
 async function fetchServerIp(): Promise<string> {
-  if (cachedServerIp && Date.now() - cachedServerIp.at < CACHE_MS) {
+  if (cachedServerIp && Date.now() - cachedServerIp.at < SERVER_IP_CACHE_MS) {
     return cachedServerIp.ip;
   }
   const r = await probe();

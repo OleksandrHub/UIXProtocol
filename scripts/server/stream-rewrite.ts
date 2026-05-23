@@ -1,7 +1,7 @@
 import { Transform, type TransformCallback } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 
-const OVERLAP = 256;
+import { STREAM_OVERLAP } from '../shared/constants';
 
 export class HostStripStream extends Transform {
   private readonly decoder = new StringDecoder('utf-8');
@@ -18,12 +18,12 @@ export class HostStripStream extends Transform {
 
   override _transform(chunk: Buffer, _enc: BufferEncoding, cb: TransformCallback): void {
     const text = this.overflow + this.decoder.write(chunk);
-    if (text.length <= OVERLAP) {
+    if (text.length <= STREAM_OVERLAP) {
       this.overflow = text;
       cb();
       return;
     }
-    const splitAt = text.length - OVERLAP;
+    const splitAt = text.length - STREAM_OVERLAP;
     const safe = text.slice(0, splitAt);
     this.overflow = text.slice(splitAt);
     this.push(Buffer.from(this.rewrite(safe), 'utf-8'));

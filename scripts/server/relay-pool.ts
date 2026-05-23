@@ -2,18 +2,12 @@ import * as net from 'node:net';
 import { URL } from 'node:url';
 
 import { environment } from '../../environments/environment';
-
-const HEALTH_CHECK_INTERVAL_MS = 10_000;
-const HEALTH_CHECK_TIMEOUT_MS = 3_000;
-const RECHECK_AFTER_FAIL_MS = 5_000;
-
-interface RelayStatus {
-  url: URL;
-  raw: string;
-  healthy: boolean;
-  lastCheckedAt: number;
-  lastError: string | null;
-}
+import {
+  HEALTH_CHECK_INTERVAL_MS,
+  HEALTH_CHECK_TIMEOUT_MS,
+  RECHECK_AFTER_FAIL_MS,
+} from '../shared/constants';
+import type { PublicRelayStatus, RelayStatus } from '../shared/types';
 
 const status: RelayStatus[] = [];
 let initPromise: Promise<void> | null = null;
@@ -110,13 +104,6 @@ export function reportRelayFailure(target: URL, error: string): void {
     }, RECHECK_AFTER_FAIL_MS).unref();
     return;
   }
-}
-
-export interface PublicRelayStatus {
-  url: string;
-  healthy: boolean;
-  lastCheckedAt: number;
-  lastError: string | null;
 }
 
 export function getRelayStatuses(): PublicRelayStatus[] {

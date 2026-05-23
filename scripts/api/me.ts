@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { getAppearance, setAppearance, updateUser } from '../db';
-import type { Appearance } from '../db/appearance';
+import type { Appearance } from '../shared/types';
 import { KNOWN_MODELS } from '../shared/constants';
 import type { UserPrompt } from '../shared/types';
 import { readJson, requireAuth, sendJson } from '../api/helpers';
