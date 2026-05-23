@@ -1,6 +1,7 @@
 import { decrypt, encrypt } from '../db/cipher';
 import { db } from '../db/connection';
 import { firstChar, hashPassword, safeParseArray, verifyHash } from '../db/crypto';
+import { USER_CACHE_TTL_MS } from '../shared/constants';
 import type {
   CreateUserInput,
   UpdateUserInput,
@@ -9,7 +10,6 @@ import type {
   UserRow,
 } from '../shared/types';
 
-const USER_CACHE_TTL_MS = 30_000;
 const userCache = new Map<number, { user: User; expiresAt: number }>();
 
 function readCache(id: number): User | null {

@@ -1,16 +1,10 @@
 import * as crypto from 'node:crypto';
 
 import { db } from '../db/connection';
-import type { UploadedFile } from '../shared/types';
+import type { GeminiUploadRow, UploadedFile } from '../shared/types';
 
 function hashKey(apiKey: string): string {
   return crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 32);
-}
-
-interface UploadRow {
-  uri: string;
-  mime_type: string;
-  expires_at: number;
 }
 
 export function getStoredUpload(apiKey: string, fileId: number): UploadedFile | null {
@@ -18,7 +12,7 @@ export function getStoredUpload(apiKey: string, fileId: number): UploadedFile | 
     .prepare(
       'SELECT uri, mime_type, expires_at FROM gemini_uploads WHERE api_key_hash = ? AND file_id = ?',
     )
-    .get(hashKey(apiKey), fileId) as UploadRow | undefined;
+    .get(hashKey(apiKey), fileId) as GeminiUploadRow | undefined;
   if (!row) return null;
   if (row.expires_at <= Date.now()) {
     db.prepare('DELETE FROM gemini_uploads WHERE api_key_hash = ? AND file_id = ?').run(

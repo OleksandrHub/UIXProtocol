@@ -11,15 +11,15 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 
-import { DB_KEY_ENV, DB_KEY_PATH } from '../shared/constants';
-
-const ALGO = 'aes-256-gcm';
-const PREFIX = 'enc:v1:';
-const IV_LEN = 12; // GCM standard nonce size
-const TAG_LEN = 16;
-
-// Binary (BLOB) format: 4-byte magic header, then iv | tag | ciphertext.
-const MAGIC = Buffer.from([0x55, 0x49, 0x58, 0x01]); // "UIX\x01"
+import {
+  CIPHER_ALGO as ALGO,
+  CIPHER_BLOB_MAGIC as MAGIC,
+  CIPHER_IV_LEN as IV_LEN,
+  CIPHER_PREFIX as PREFIX,
+  CIPHER_TAG_LEN as TAG_LEN,
+  DB_KEY_ENV,
+  DB_KEY_PATH,
+} from '../shared/constants';
 
 function loadKey(): Buffer {
   const fromEnv = process.env[DB_KEY_ENV];

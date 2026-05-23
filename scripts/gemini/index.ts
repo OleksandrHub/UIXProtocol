@@ -5,7 +5,8 @@ import {
   makeClient,
   uploadFileForKey,
 } from '../gemini/cache';
-import { parseResultText, parseStructured, STRUCTURED_SUFFIX } from '../gemini/parser';
+import { parseResultText, parseStructured } from '../gemini/parser';
+import { STRUCTURED_SUFFIX } from '../shared/constants';
 import type { PreloadResult, SolveOptions, SolveResult, UserFile } from '../shared/types';
 
 export { getCachedFileIds, invalidateUploadsForUser } from '../gemini/cache';

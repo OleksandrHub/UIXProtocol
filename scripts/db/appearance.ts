@@ -1,6 +1,5 @@
 import { db } from '../db/connection';
-
-export type Appearance = Record<string, unknown>;
+import type { Appearance } from '../shared/types';
 
 export function getAppearance(userId: number): Appearance {
   const row = db

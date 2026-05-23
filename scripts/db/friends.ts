@@ -1,4 +1,5 @@
 import { db } from '../db/connection';
+import { FRIEND_JOIN_SQL as JOIN_SQL } from '../shared/constants';
 import type {
   FriendConnection,
   FriendConnectionRow,
@@ -16,13 +17,6 @@ function rowToConnection(row: FriendConnectionRow): FriendConnection {
     createdAt: row.created_at,
   };
 }
-
-const JOIN_SQL = `
-  SELECT c.*, a.name AS asker_name, h.name AS helper_name
-  FROM friend_connections c
-  LEFT JOIN users a ON a.id = c.asker_id
-  LEFT JOIN users h ON h.id = c.helper_id
-`;
 
 export function listMyFriends(userId: number): FriendsList {
   const rows = db
