@@ -169,9 +169,77 @@ fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return
 }).catch(function(e){console.warn(TAG+' relay-ip впав (relay не налаштований чи недоступний):',S,e.message);});
 })();</script>`;
 
+const RUNTIME_URL_REWRITE_SCRIPT = `<script data-uix-urlhook>(function(){try{
+var origin=location.origin;
+function rewrite(u){
+  if(typeof u!=='string'||!u)return u;
+  var c=u.charAt(0);
+  if(c==='#'||c==='?')return u;
+  if(/^[a-z][a-z0-9+.-]*:/i.test(u)&&!/^https?:/i.test(u))return u;
+  try{
+    var url=new URL(u,location.href);
+    if(url.protocol!=='http:'&&url.protocol!=='https:')return u;
+    if(url.origin===origin)return u;
+    return '/_p/'+url.href;
+  }catch(e){return u;}
+}
+function hookProp(proto,prop){
+  try{
+    var d=Object.getOwnPropertyDescriptor(proto,prop);
+    if(!d||!d.set)return;
+    var origSet=d.set,origGet=d.get;
+    Object.defineProperty(proto,prop,{
+      configurable:true,enumerable:d.enumerable,
+      get:function(){return origGet?origGet.call(this):undefined;},
+      set:function(v){origSet.call(this,rewrite(v));}
+    });
+  }catch(e){}
+}
+hookProp(HTMLScriptElement.prototype,'src');
+hookProp(HTMLLinkElement.prototype,'href');
+hookProp(HTMLImageElement.prototype,'src');
+hookProp(HTMLIFrameElement.prototype,'src');
+if(typeof HTMLSourceElement!=='undefined')hookProp(HTMLSourceElement.prototype,'src');
+if(typeof HTMLMediaElement!=='undefined')hookProp(HTMLMediaElement.prototype,'src');
+try{
+  var origSetAttr=Element.prototype.setAttribute;
+  Element.prototype.setAttribute=function(name,value){
+    try{
+      var ln=String(name).toLowerCase();
+      var tn=this.tagName?this.tagName.toLowerCase():'';
+      if(ln==='src'&&(tn==='script'||tn==='img'||tn==='iframe'||tn==='source'||tn==='audio'||tn==='video')){
+        value=rewrite(value);
+      }else if(ln==='href'&&tn==='link'){
+        value=rewrite(value);
+      }
+    }catch(e){}
+    return origSetAttr.call(this,name,value);
+  };
+}catch(e){}
+try{
+  if(typeof window.fetch==='function'){
+    var origFetch=window.fetch;
+    window.fetch=function(input,init){
+      try{
+        if(typeof input==='string')input=rewrite(input);
+      }catch(e){}
+      return origFetch.call(this,input,init);
+    };
+  }
+}catch(e){}
+try{
+  var origOpen=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(method,url){
+    var args=Array.prototype.slice.call(arguments);
+    try{args[1]=rewrite(url);}catch(e){}
+    return origOpen.apply(this,args);
+  };
+}catch(e){}
+}catch(e){}})();</script>`;
+
 const VIEWPORT_RE = /<meta\b[^>]*\bname\s*=\s*["']viewport["'][^>]*>/i;
 const HEAD_RE = /<head\b([^>]*)>/i;
-const INJECTED_HEAD_PREFIX = KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT;
+const INJECTED_HEAD_PREFIX = KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT + RUNTIME_URL_REWRITE_SCRIPT;
 
 function injectHtmlHelpers(html: string): string {
   const hasViewport = VIEWPORT_RE.test(html);
@@ -197,6 +265,11 @@ function performProxy(
   userId: number | null,
   opts: ProxyOpts = {}
 ): void {
+  const crossOrigin = pathOnly.match(/^\/(https?:\/\/[^/]+)(\/.*)?$/i);
+  if (crossOrigin) {
+    targetRaw = crossOrigin[1]!;
+    pathOnly = crossOrigin[2] || '/';
+  }
   const TARGET = /^https?:\/\//i.test(targetRaw) ? targetRaw : `https://${targetRaw}`;
   let targetHost: string;
   try {
