@@ -36,6 +36,9 @@ if (!hasCol('active_model')) {
 if (!hasCol('archive_questions')) {
   db.exec('ALTER TABLE users ADD COLUMN archive_questions INTEGER NOT NULL DEFAULT 1');
 }
+if (!hasCol('dev_tools')) {
+  db.exec('ALTER TABLE users ADD COLUMN dev_tools INTEGER NOT NULL DEFAULT 0');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_files (

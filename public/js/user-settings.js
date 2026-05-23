@@ -35,6 +35,7 @@ export function initSettings({
   const urlInput = document.getElementById('urlInput');
   const keysInput = document.getElementById('keysInput');
   const passInput = document.getElementById('passInput');
+  const devToolsInput = document.getElementById('devToolsInput');
   const settingsError = document.getElementById('settingsError');
 
   const tabs = document.querySelectorAll('#settingsTabs .tab');
@@ -396,6 +397,7 @@ export function initSettings({
     urlInput.value = me.targetUrl ?? '';
     keysInput.value = (me.apiKeys ?? []).join('\n');
     passInput.value = '';
+    devToolsInput.checked = me.devTools === true;
     settingsError.textContent = '';
 
     prompts = (me.prompts ?? []).map((p) => ({ ...p }));
@@ -483,12 +485,23 @@ export function initSettings({
         me.activeModel = updated.activeModel;
       }
 
+      const newDevTools = devToolsInput.checked;
+      let devToolsChanged = false;
+      if (newDevTools !== (me.devTools === true)) {
+        await api('/me/dev-tools', {
+          method: 'PUT',
+          body: JSON.stringify({ devTools: newDevTools }),
+        });
+        me.devTools = newDevTools;
+        devToolsChanged = true;
+      }
+
       const a = collectAppearance();
       await saveAppearance(a);
       applyAppearance(a);
 
       modal.hidden = true;
-      if (urlChanged) frame.src = proxyBase;
+      if (urlChanged || devToolsChanged) frame.src = proxyBase;
     } catch (e) {
       settingsError.textContent = e.message;
     }

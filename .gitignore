@@ -63,5 +63,8 @@ Thumbs.db
 db-secret.key
 loaderio-*.txt
 
+# Self-signed TLS material generated at startup
+/tls
+
 # files
 test_v3(+keyboard).pyw
