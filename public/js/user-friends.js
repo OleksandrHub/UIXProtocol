@@ -247,7 +247,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
         method: 'POST',
         body: JSON.stringify({ imageBase64 }),
       });
-      showResult('очікую відповідь…');
+      showResult('…');
     } catch (e) {
       console.error('[friend screenshot]', e);
       showResult(`помилка: ${e.message}`);

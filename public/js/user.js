@@ -302,8 +302,8 @@ function installShortcuts({
     const isM = k === 'm' || code === 'KeyM';
     const isC = k === 'c' || code === 'KeyC';
     const isF = k === 'f' || code === 'KeyF';
-    const isR = k === 'r' || code === 'KeyR';
-    if (!isG && !isH && !isM && !isC && !isF && !isR) return;
+    const isV = k === 'v' || code === 'KeyV';
+    if (!isG && !isH && !isM && !isC && !isF && !isV) return;
     e.preventDefault();
     e.stopPropagation();
     if (isG) triggerGemini();
@@ -311,7 +311,7 @@ function installShortcuts({
     else if (isM) toggleBar();
     else if (isC) cycleModel();
     else if (isF) toggleFriendMode?.();
-    else if (isR) cycleVariant?.();
+    else if (isV) cycleVariant?.();
   };
 
   let lastWheel = 0;

@@ -206,7 +206,7 @@ export async function setActiveVariant(id) {
   return target;
 }
 
-// Cycle to next variant (Alt+R).
+// Cycle to next variant (Alt+V).
 export async function cycleVariant() {
   const list = cache.variants;
   if (list.length < 2) return null;
