@@ -4,7 +4,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'node:url';
 
 import { sendJson } from '../api/helpers';
-import { environment } from '../../environments/environment';
 import { getRelayStatuses } from '../server/relay-pool';
 import { IP_PROBE, SERVER_IP_CACHE_MS } from '../shared/constants';
 import type { ProbeResult } from '../shared/types';
@@ -67,9 +66,6 @@ function probeViaSpecificRelay(rawRelayUrl: string): Promise<ProbeResult> {
         method: 'GET',
         headers: {
           'x-relay-url': IP_PROBE,
-          ...(environment.forwardProxySecret
-            ? { 'x-relay-secret': environment.forwardProxySecret }
-            : {}),
         },
       },
       (res) => {

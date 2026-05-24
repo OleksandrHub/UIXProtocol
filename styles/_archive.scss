@@ -186,8 +186,13 @@
   gap: .5rem;
   flex-wrap: wrap;
 
+  // flex-basis: 100% turns the spacer into a forced line-break inside the
+  // wrapping flex row — items before it stay on the top row, everything
+  // after drops to a new row. Zero height keeps vertical layout tight.
   &__spacer {
-    flex: 1;
+    flex: 0 0 100%;
+    height: 0;
+    margin: 0;
   }
 }
 

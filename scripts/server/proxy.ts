@@ -204,11 +204,7 @@ function performProxy(
     delete incomingHeaders['x-forwarded-proto'];
     delete incomingHeaders['x-forwarded-host'];
     incomingHeaders['x-relay-url'] = targetUrl.href;
-    if (environment.forwardProxySecret) {
-      incomingHeaders['x-relay-secret'] = environment.forwardProxySecret;
-    }
   } else {
-    console.warn(`Proxy work on central server without`);
     outboundHostname = targetUrl.hostname;
     outboundPort = TARGET.startsWith('https:') ? 443 : 80;
     outboundPath = targetUrl.pathname + targetUrl.search;
