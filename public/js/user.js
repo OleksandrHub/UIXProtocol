@@ -12,6 +12,7 @@ import { initFrameActivity } from './user-frame-activity.js';
 import { initSettings } from './user-settings.js';
 import { initArchive } from './user-archive.js';
 import { initFriends } from './user-friends.js';
+import { initOnboarding } from './user-onboarding.js';
 
 const id = Number(location.pathname.split('/').filter(Boolean)[0]);
 if (!Number.isFinite(id)) location.href = '/';
@@ -215,6 +216,7 @@ async function enterAuthed(me, { fromLogin }) {
   });
 
   initArchive({ me });
+  initOnboarding();
 }
 
 function installFavicon(me) {

@@ -30,11 +30,12 @@ npm run start
 - **Власні промти** з вибором активного — зберігаються в БД на користувача
 - **Перемикання моделей**: вмикати/вимикати моделі в налаштуваннях, активна модель циклічно перемикається через `Alt+C`. Запит йде **тільки в активну модель** (без fallback на інші, щоб не палити квоту на резерв)
 - **Вкладення файлів**: будь-які файли (PDF, зображення, текст, аудіо, відео тощо) зберігаються в БД і автоматично передаються в Gemini як контекст разом зі скріншотом (через Files API + `createPartFromUri`)
-- **Варіанти вигляду відповіді Gemini** (Alt+R) — кілька іменованих пресетів стилю (шрифт/колір/фон), перемикаються по колу
+- **Варіанти вигляду відповіді Gemini** (Alt+V) — кілька іменованих пресетів стилю (шрифт/колір/фон), перемикаються по колу
 - **Кастомізація вигляду** (шрифт/розмір/колір/фон) для відповіді Gemini, кнопки `S` та активного стану кнопки `Д` — зберігається в БД (таблиця `user_appearance`)
 - **Допомога друга** (Alt+F або кнопка `Д`) — підключаєш помічника за іменем, скрін летить йому, відповідь з'являється на місці Gemini-відповіді. Real-time через SSE
 - **IP-ротація через ноути** — центральний сервер може форвардити вихідні запити до target через одного з кількох ноутів-relay (sticky per userId), target бачить IP конкретного ноута, а не центрального сервера
-- Гарячі клавіші `Alt+G/H/M/C/F/R` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
+- Гарячі клавіші `Alt+G/H/M/C/F/V` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
+- **Гід-помічник** (🤖) — стартовий онбоардинг із 8 кроків по основних фішках (`S`-кнопка, Alt-хоткеї, режим друга, архів, налаштування). За замовчуванням показується одноразово на першому вході, повторно вмикається в `Налаштуваннях → Вигляд → "Показувати гід-помічника"`
 - Невидимий клік-зон 44×44 у правому верхньому куті для відкриття меню
 - Назва вкладки та favicon автоматично підхоплюються з цільового сайту
 - Адаптивна верстка для мобільних (top-bar, адмін-панель, таблиця користувачів)
@@ -67,14 +68,14 @@ scripts/
 | [scripts/server/static.ts](scripts/server/static.ts) | `serveFile`, `safeJsPath` — стрімінг локальних файлів |
 | [scripts/server/proxy.ts](scripts/server/proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — реверс-проксі та preview-режим |
 
-**REST API (`/api/*`):**
+**REST API (`/_uix/api/*`):**
 | Файл | Призначення |
 | --- | --- |
 | [scripts/api/router.ts](scripts/api/router.ts) | Диспетчер: пробує кожну групу хендлерів по черзі |
 | [scripts/api/helpers.ts](scripts/api/helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
-| [scripts/api/auth.ts](scripts/api/auth.ts) | Логін / логаут / `/api/me` / `/api/config` / `/api/users/by-name` |
+| [scripts/api/auth.ts](scripts/api/auth.ts) | Логін / логаут / `/_uix/api/me` / `/_uix/api/config` / `/_uix/api/users/by-name` |
 | [scripts/api/me.ts](scripts/api/me.ts) | Налаштування користувача: URL, ключі, пароль, промти, моделі |
-| [scripts/api/files.ts](scripts/api/files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
+| [scripts/api/files.ts](scripts/api/files.ts) | `/_uix/api/me/files/*` (CRUD/status/preload) + `/_uix/api/gemini/solve` |
 | [scripts/api/questions.ts](scripts/api/questions.ts) | Архів питань: список, додавання, редагування, шеринг |
 | [scripts/api/admin-users.ts](scripts/api/admin-users.ts) | Адмінський CRUD над користувачами |
 
@@ -124,7 +125,7 @@ JS і HTML кожної сторінки розкладено за зоною в
 Розклад модулів `user.js`:
 
 - [public/js/user.js](public/js/user.js) — точка входу, `enterAuthed`, `installFavicon`, `installShortcuts`, `initLogin`, `initModelToast`, `shortModel`
-- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_DEFAULTS`, `loadAppearance` (in-memory cache), `fetchAppearance`/`saveAppearance` (через `GET/PUT /api/me/appearance`), `applyAppearance`, `hexToRgba`
+- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_DEFAULTS`, `loadAppearance` (in-memory cache), `fetchAppearance`/`saveAppearance` (через `GET/PUT /_uix/api/me/appearance`), `applyAppearance`, `hexToRgba`
 - [public/js/user-gemini.js](public/js/user-gemini.js) — `initGemini` (скрін iframe + виклик Gemini через `html2canvas`)
 - [public/js/user-files-status.js](public/js/user-files-status.js) — `initFilesStatus` (бейдж статусу файлів + кнопка прогріву)
 - [public/js/user-settings.js](public/js/user-settings.js) — `initSettings` (модалка з табами: основні, промти, моделі, файли, вигляд)
@@ -152,7 +153,7 @@ JS і HTML кожної сторінки розкладено за зоною в
 - `/_p/<id>/...` — preview-проксі для неавтентифікованих відвідувачів (без cookies таргета, виставляється `uix_preview` cookie)
 - `/style.css` (+ `/style.css.map`) і `/favicon.ico` — статика з `public/`
 - `/js/*` — клієнтські модулі з `public/js/`
-- `/api/*` — REST (див. нижче)
+- `/_uix/api/*` — REST (див. нижче)
 - решта — fallback-проксі (для абсолютних шляхів усередині проксійованого HTML)
 
 ## Мультиноут / IP-ротація через forward-relay
@@ -283,8 +284,8 @@ forwardProxies: [
 1. **A → запит**: Settings → таб "Друзі" → ввести ім'я B → "Запросити". У БД створюється `friend_connections` зі `status='pending'`. SSE-подія `request` летить B-у.
 2. **B → акцепт**: бачить toast "запит на допомогу від A" + у своєму "Друзі" з'являється рядок "Прийняти/Відхилити". Прийняти → `status='active'`. SSE-подія `accepted` летить A-у.
 3. **A → режим друга**: `Alt+F` (або клік на кнопку `Д` поряд з `S`) → toast "режим: ДРУГ (<ім'я B>)", кнопка `Д` підсвічується синім.
-4. **A → надсилає скрін**: натискає `S` / `Alt+G` / `Ctrl+wheel-up` → скрін iframe → `POST /api/me/friends/screenshot` → SSE-подія `screenshot` (з base64 картинкою) летить B-у. У A в `#geminiResult` напис "очікую відповідь…".
-5. **B → відповідь**: автоматично відкривається модал "Допомога другу" з картинкою. B пише текст → "Надіслати" / `Ctrl+Enter` → `POST /api/me/friends/reply`. SSE-подія `reply` летить A-у.
+4. **A → надсилає скрін**: натискає `S` / `Alt+G` / `Ctrl+wheel-up` → скрін iframe → `POST /_uix/api/me/friends/screenshot` → SSE-подія `screenshot` (з base64 картинкою) летить B-у. У A в `#geminiResult` напис "очікую відповідь…".
+5. **B → відповідь**: автоматично відкривається модал "Допомога другу" з картинкою. B пише текст → "Надіслати" / `Ctrl+Enter` → `POST /_uix/api/me/friends/reply`. SSE-подія `reply` летить A-у.
 6. **A → бачить відповідь**: текст з'являється в `#geminiResult` як звичайна відповідь Gemini.
 
 ### Обмеження
@@ -320,13 +321,13 @@ forwardProxies: [
   2. `Referer` починається з `/_p/<id>/` → preview для цього `id`
   3. Cookie `uix_preview` → preview для цього `id`
   4. Інакше — `403`
-- `server.ts` сам — лише `http.createServer` із плоским ланцюжком `if`-ів, що відсіюють `/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/` та `/`. Усе інше падає в `proxyHandle`.
+- `server.ts` сам — лише `http.createServer` із плоским ланцюжком `if`-ів, що відсіюють `/_uix/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/` та `/`. Усе інше падає в `proxyHandle`.
 
 ### `api/` — `router.ts` (диспетчер) + решта груп маршрутів
 
-`handleApi(req, res)` повертає `true`, якщо запит оброблений як `/api/*`, інакше `false` — і керування передається в роутер `server/server.ts`. Сам диспетчер крихітний: пробує `handleAuth` → `handleMe` → `handleFiles` → `handleQuestions` → `handleAdminUsers`; перший, що повертає `true`, виграє. Інакше — `404`.
+`handleApi(req, res)` повертає `true`, якщо запит оброблений як `/_uix/api/*`, інакше `false` — і керування передається в роутер `server/server.ts`. Сам диспетчер крихітний: пробує `handleAuth` → `handleMe` → `handleFiles` → `handleQuestions` → `handleAdminUsers`; перший, що повертає `true`, виграє. Інакше — `404`.
 
-Усе тіло читається через `readJson<T>()` ([helpers.ts](scripts/api/helpers.ts)) з лімітом 1 МБ (30 МБ для `POST /api/me/files`, 15 МБ для `/api/gemini/solve` через base64-картинку). Помилки серіалізуються у `{ error: "..." }` через `sendJson(res, status, body)`.
+Усе тіло читається через `readJson<T>()` ([helpers.ts](scripts/api/helpers.ts)) з лімітом 1 МБ (30 МБ для `POST /_uix/api/me/files`, 15 МБ для `/_uix/api/gemini/solve` через base64-картинку). Помилки серіалізуються у `{ error: "..." }` через `sendJson(res, status, body)`.
 
 `requireAuth(req, res)` (загальний для `api-me`/`api-files`) повертає `User` або `null`, попередньо відписавши `401`. У [admin-users.ts](scripts/api/admin-users.ts) додатково є `requireAdmin(req, res)`, що додає перевірку `isAdmin`.
 
@@ -435,7 +436,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 Логіка:
 
-1. Запит `GET /api/me`.
+1. Запит `GET /_uix/api/me`.
 2. Якщо `me.id === id` (тобто авторизований саме як цей користувач) → `enterAuthed()`.
 3. Інакше → `initLogin()` — швидкий вхід.
 
@@ -443,25 +444,25 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 - Показує top-bar з ім'ям, кнопками "Налаштування", "Адмін" (для адмінів), "Вихід".
 - Реєструє `barTrigger` (невидимий клік-зон 44×44 у правому верхньому куті) → клік toggle меню.
-- Запит `GET /api/config` → ставить `allow="..."` на iframe згідно `iframePermissions` і виставляє `frame.src` в `proxyBase` (`/_p/`), якщо це не редирект після свіжого логіну (`fromLogin=true` — iframe уже показує таргет).
+- Запит `GET /_uix/api/config` → ставить `allow="..."` на iframe згідно `iframePermissions` і виставляє `frame.src` в `proxyBase` (`/_p/`), якщо це не редирект після свіжого логіну (`fromLogin=true` — iframe уже показує таргет).
 - Імпортує `initGemini()` ([user-gemini.js](public/js/user-gemini.js)), `initFilesStatus()` ([user-files-status.js](public/js/user-files-status.js)), `initSettings()` ([user-settings.js](public/js/user-settings.js)). Реєструє гарячі клавіші / колесо, навішує `frame.addEventListener('load', syncMetaFromFrame)` для синхронізації title/favicon.
-- При вході підвантажує збережений вигляд із сервера (`fetchAppearance` → `GET /api/me/appearance`) і застосовує через CSS-змінні (`applyAppearance` із [user-appearance.js](public/js/user-appearance.js)).
+- При вході підвантажує збережений вигляд із сервера (`fetchAppearance` → `GET /_uix/api/me/appearance`) і застосовує через CSS-змінні (`applyAppearance` із [user-appearance.js](public/js/user-appearance.js)).
 - Налаштування зберігаються кількома PUT-запитами — лише для змінених полів: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`, `/me/appearance`. Файли заливаються/видаляються одразу через `/me/files`.
 
 `initLogin()`:
 
 - Виставляє `frame.src = "/_p/<id>/"` — користувач бачить таргет ще до логіну (preview-режим).
-- Показує приховану форму `<input type="password" maxLength="1">`. Подія `input` автоматично надсилає `POST /api/login/<id>/quick` з одним символом, як тільки в полі є рівно один символ.
+- Показує приховану форму `<input type="password" maxLength="1">`. Подія `input` автоматично надсилає `POST /_uix/api/login/<id>/quick` з одним символом, як тільки в полі є рівно один символ.
 - На помилці — клас `wrong shake` (CSS-анімація трясіння), фокус повертається на input.
 
 ### `/` — повний логін ([public/js/login.js](public/js/login.js))
 
-Звичайна форма `name + password` → `POST /api/login` → редирект на `/<user.id>/`.
+Звичайна форма `name + password` → `POST /_uix/api/login` → редирект на `/<user.id>/`.
 
 ### `/admin` ([public/js/admin.js](public/js/admin.js), [public/js/admin-login.js](public/js/admin-login.js))
 
-- Якщо не авторизований як адмін, сервер віддає `admin-login.html` із формою `POST /api/admin/login`. Після успіху — `location.reload()` → сервер віддає `admin.html`.
-- В адмін-панелі: таблиця користувачів (id, name, admin, target, к-ть ключів), форма "Створити / Редагувати" та `DELETE /api/users/:id` з `confirm()`.
+- Якщо не авторизований як адмін, сервер віддає `admin-login.html` із формою `POST /_uix/api/admin/login`. Після успіху — `location.reload()` → сервер віддає `admin.html`.
+- В адмін-панелі: таблиця користувачів (id, name, admin, target, к-ть ключів), форма "Створити / Редагувати" та `DELETE /_uix/api/users/:id` з `confirm()`.
 - Рендер таблиці і `removeUser` живуть у [admin-users.js](public/js/admin-users.js) (`setupUsers({ tbody, errEl, fieldId, setEdit }) → { refresh }`); сама форма та її `setEdit` — у `admin.js`.
 - При редагуванні: пусте поле "Пароль" не змінює пароль; список API-ключів — рядок на ключ.
 
@@ -478,9 +479,9 @@ data     TEXT NOT NULL DEFAULT '{}'
 | `Alt+G` | Зробити скрін iframe і надіслати (Gemini або друг — залежно від режиму) | `triggerScreenshot()` маршрутизує між Gemini та friend                              |
 | `Alt+H` | Показати/сховати останню відповідь                        | `toggleResult()`                                                                                         |
 | `Alt+M` | Показати/сховати верхнє меню (top-bar)                    | `toggleBar()`                                                                                            |
-| `Alt+C` | Перемкнути активну Gemini-модель на наступну з увімкнених | `cycleModel()` — `PUT /api/me/active-model`, скорочена назва спливає в `#modelToast` (правий нижній кут) |
+| `Alt+C` | Перемкнути активну Gemini-модель на наступну з увімкнених | `cycleModel()` — `PUT /_uix/api/me/active-model`, скорочена назва спливає в `#modelToast` (правий нижній кут) |
 | `Alt+F` | Перемкнути режим друга (Gemini ↔ помічник). Альтернатива — клік на кнопку `Д` поряд з `S` | `friends.toggleMode()` — потребує активного помічника |
-| `Alt+R` | Циклічно перемкнути варіант вигляду відповіді              | `cycleVariant()` — змінює `activeVariantId` у `user_appearance`, тост із назвою варіанту                |
+| `Alt+V` | Циклічно перемкнути варіант вигляду відповіді              | `cycleVariant()` — змінює `activeVariantId` у `user_appearance`, тост із назвою варіанту                |
 
 Для iframe із cross-origin таргета `frame.contentDocument` буде `null` — тоді клавіші ловить тільки зовнішнє вікно. Власне Gemini теж потребує same-origin доступу до iframe (бо знімок робиться з його DOM через `html2canvas`).
 
@@ -509,20 +510,20 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 - **Ім'я користувача** — просто текст.
 - **Налаштування** — модалка з табами:
-  - **Основні**: URL сайту → `PUT /api/me/url`, API ключі → `PUT /api/me/api-keys`, новий пароль (порожньо — не змінювати) → `PUT /api/me/password`.
-  - **Промти**: довільна кількість іменованих промтів, один обраний як активний (radio). Зберігається в `prompts` + `active_prompt_id` через `PUT /api/me/prompts`.
-  - **Моделі**: чекбокси по списку `KNOWN_MODELS`, radio для активної моделі, підказка про `Alt+C`. Зберігається через `PUT /api/me/models`. Запит на solve йде **тільки в активну модель** (без fallback на інші — fallback залишився лише між API-ключами).
-  - **Файли**: довільні файли (PDF, зображення, текст, аудіо, відео…), що передаються в Gemini контекстом. Додавання — `POST /api/me/files` (base64, MIME визначається браузером), видалення — `DELETE /api/me/files/:id`.
+  - **Основні**: URL сайту → `PUT /_uix/api/me/url`, API ключі → `PUT /_uix/api/me/api-keys`, новий пароль (порожньо — не змінювати) → `PUT /_uix/api/me/password`.
+  - **Промти**: довільна кількість іменованих промтів, один обраний як активний (radio). Зберігається в `prompts` + `active_prompt_id` через `PUT /_uix/api/me/prompts`.
+  - **Моделі**: чекбокси по списку `KNOWN_MODELS`, radio для активної моделі, підказка про `Alt+C`. Зберігається через `PUT /_uix/api/me/models`. Запит на solve йде **тільки в активну модель** (без fallback на інші — fallback залишився лише між API-ключами).
+  - **Файли**: довільні файли (PDF, зображення, текст, аудіо, відео…), що передаються в Gemini контекстом. Додавання — `POST /_uix/api/me/files` (base64, MIME визначається браузером), видалення — `DELETE /_uix/api/me/files/:id`.
   - **Вигляд** — три блоки:
-    1. **Варіанти вигляду відповіді** (`<select>` + кнопки `+ ✎ ×`) — кілька іменованих пресетів. Активний застосовується. `Alt+R` циклічно перемикає. Перемикання/додавання/видалення/перейменування зберігаються одразу через `PUT /api/me/appearance`.
+    1. **Варіанти вигляду відповіді** (`<select>` + кнопки `+ ✎ ×`) — кілька іменованих пресетів. Активний застосовується. `Alt+V` циклічно перемикає. Перемикання/додавання/видалення/перейменування зберігаються одразу через `PUT /_uix/api/me/appearance`.
     2. **Відповідь Gemini** — шрифт, розмір, колір тексту, колір фону + слайдер прозорості. Зміни пишуться у **поточний активний варіант**. Live-preview через CSS-змінні (`--result-*`).
     3. **Кнопка S** та **Кнопка Д у режимі друга (активний стан)** — окремі набори кольору/прозорості для двох кнопок. Не входять у варіанти — це глобальні налаштування.
     4. **Індикатори** — чекбокси видимості елементів (статус файлів, тост моделі, debug iframe). Відсилаються на сервер відразу після кліку.
     
     Зберігання — в `user_appearance.data` (JSON-blob). При першому fetch старі плоскі `result*` поля автоматично загортаються у варіант "Default" (міграція в [user-appearance.js](public/js/user-appearance.js#L73) `migrate()`).
-  - **Друзі**: запит помічника за іменем + список pending/active підключень. Прийняття/відхилення pending-запитів. Інструкція "як це працює" + кнопки керування. Усі взаємодії — через `/api/me/friends/*` + SSE.
+  - **Друзі**: запит помічника за іменем + список pending/active підключень. Прийняття/відхилення pending-запитів. Інструкція "як це працює" + кнопки керування. Усі взаємодії — через `/_uix/api/me/friends/*` + SSE.
 - **Адмін** — посилання на `/admin` (тільки для `isAdmin=true`).
-- **Вихід** — `POST /api/logout`, редирект на `/`.
+- **Вихід** — `POST /_uix/api/logout`, редирект на `/`.
 
 ### Панель Gemini
 
@@ -550,7 +551,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 2. `ensureHtml2Canvas(win)` — підключає [html2canvas 1.4.1](https://html2canvas.hertzen.com/) із CDN у `iframe.contentDocument` (на самій сторінці воно вже є — підвантажене з `<script>` у [pages/user.html](pages/user.html)).
 3. `captureFrame()` — `html2canvas` із `useCORS`, `allowTaint`. Захоплюється **повна ширина сайту** (`documentElement.scrollWidth`, з `x: 0`) і лише **висота вьюпорта** (`innerHeight`, з `y: scrollY`) — тобто якщо проксійований сайт ширший за екран телефона, у скріншот потрапляє все, що праворуч за межами видимої області, а вертикально — те, що навколо поточної позиції скролу.
 4. `canvasToBase64Jpeg()` — даунскейл до **1600 px** по ширині, JPEG quality **0.7**, base64.
-5. `POST /api/gemini/solve` із одним лише `imageBase64`. Активний промт, активна модель і прикріплені файли беруться сервером із даних користувача в БД.
+5. `POST /_uix/api/gemini/solve` із одним лише `imageBase64`. Активний промт, активна модель і прикріплені файли беруться сервером із даних користувача в БД.
 6. Відповідь показується в `.gemini-result`.
 
 Сервер ([files.ts](scripts/api/files.ts) → [gemini.ts](scripts/gemini/index.ts)):
@@ -598,62 +599,62 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 | Метод | Шлях                       | Опис                                                                                        |
 | ----- | -------------------------- | ------------------------------------------------------------------------------------------- |
-| POST  | `/api/login`               | `{name, password}`                                                                          |
-| POST  | `/api/login/:id`           | `{password}` — логін за id                                                                  |
-| POST  | `/api/login/:id/quick`     | `{char}` — швидкий вхід за першим символом                                                  |
-| POST  | `/api/admin/login`         | Як `/api/login`, але відмовляє не-адмінам                                                   |
-| POST  | `/api/logout`              | —                                                                                           |
-| GET   | `/api/me`                  | Поточний користувач (включно з `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
-| GET   | `/api/config`              | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }`                              |
-| GET   | `/api/users/by-name/:name` | `{ id, name, targetUrl }`                                                                   |
+| POST  | `/_uix/api/login`               | `{name, password}`                                                                          |
+| POST  | `/_uix/api/login/:id`           | `{password}` — логін за id                                                                  |
+| POST  | `/_uix/api/login/:id/quick`     | `{char}` — швидкий вхід за першим символом                                                  |
+| POST  | `/_uix/api/admin/login`         | Як `/_uix/api/login`, але відмовляє не-адмінам                                                   |
+| POST  | `/_uix/api/logout`              | —                                                                                           |
+| GET   | `/_uix/api/me`                  | Поточний користувач (включно з `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
+| GET   | `/_uix/api/config`              | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }`                              |
+| GET   | `/_uix/api/users/by-name/:name` | `{ id, name, targetUrl }`                                                                   |
 
 ### Користувач (потребує сесії)
 
 | Метод  | Шлях                   | Тіло / результат                                                                     |
 | ------ | ---------------------- | ------------------------------------------------------------------------------------ |
-| PUT    | `/api/me/url`          | `{ url: string }`                                                                    |
-| PUT    | `/api/me/password`     | `{ password: string }`                                                               |
-| PUT    | `/api/me/api-keys`     | `{ apiKeys: string[] }`                                                              |
-| PUT    | `/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                             |
-| PUT    | `/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (фільтрується за `KNOWN_MODELS`) |
-| PUT    | `/api/me/active-model` | `{ activeModel: string }` — має бути в `enabledModels`                               |
-| GET    | `/api/me/appearance`   | JSON-обʼєкт із налаштуваннями вигляду (`{}` якщо ще не збережено)                    |
-| PUT    | `/api/me/appearance`   | Повний JSON-обʼєкт налаштувань → пише в `user_appearance.data`                       |
-| GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                |
-| POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → метадані файлу (ліміт 30 МБ)                          |
-| DELETE | `/api/me/files/:id`    | `204`, скидає кеш URI у `gemini/cache.ts`                                                  |
-| POST   | `/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Промт/файли беруться з БД, модель = тільки активна |
+| PUT    | `/_uix/api/me/url`          | `{ url: string }`                                                                    |
+| PUT    | `/_uix/api/me/password`     | `{ password: string }`                                                               |
+| PUT    | `/_uix/api/me/api-keys`     | `{ apiKeys: string[] }`                                                              |
+| PUT    | `/_uix/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                             |
+| PUT    | `/_uix/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (фільтрується за `KNOWN_MODELS`) |
+| PUT    | `/_uix/api/me/active-model` | `{ activeModel: string }` — має бути в `enabledModels`                               |
+| GET    | `/_uix/api/me/appearance`   | JSON-обʼєкт із налаштуваннями вигляду (`{}` якщо ще не збережено)                    |
+| PUT    | `/_uix/api/me/appearance`   | Повний JSON-обʼєкт налаштувань → пише в `user_appearance.data`                       |
+| GET    | `/_uix/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                |
+| POST   | `/_uix/api/me/files`        | `{ name, mime, dataBase64 }` → метадані файлу (ліміт 30 МБ)                          |
+| DELETE | `/_uix/api/me/files/:id`    | `204`, скидає кеш URI у `gemini/cache.ts`                                                  |
+| POST   | `/_uix/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Промт/файли беруться з БД, модель = тільки активна |
 
 ### Friend-help (потребує сесії)
 
 | Метод  | Шлях                              | Тіло / результат                                                                            |
 | ------ | --------------------------------- | ------------------------------------------------------------------------------------------- |
-| GET    | `/api/me/friends`                 | `{ asAsker, asHelper, pendingIncoming, pendingOutgoing }` — списки за роллю поточного юзера |
-| POST   | `/api/me/friends/request`         | `{ toName }` → створити pending-запит. Я стаю аскером, target — помічником                 |
-| POST   | `/api/me/friends/accept`          | `{ id }` → перевести pending в active (тільки якщо я — помічник цього запиту)              |
-| DELETE | `/api/me/friends/:id`             | `204` — будь-яка сторона може видалити                                                     |
-| POST   | `/api/me/friends/screenshot`      | `{ imageBase64 }` → надіслати скрін активному помічнику через SSE                          |
-| POST   | `/api/me/friends/reply`           | `{ askerId, text }` → відповідь аскеру (тільки якщо я — його активний помічник)            |
-| GET    | `/api/me/friends/stream`          | **SSE**. Події: `request`, `accepted`, `disconnected`, `screenshot`, `reply`. Keepalive 25с |
-| GET    | `/api/me/friends/check/:name`     | Перевірити, чи існує юзер з таким іменем (для UI-валідації перед запитом)                   |
-| GET    | `/api/users-public/:id`           | `{ id, name }` — публічна інфа про юзера                                                    |
+| GET    | `/_uix/api/me/friends`                 | `{ asAsker, asHelper, pendingIncoming, pendingOutgoing }` — списки за роллю поточного юзера |
+| POST   | `/_uix/api/me/friends/request`         | `{ toName }` → створити pending-запит. Я стаю аскером, target — помічником                 |
+| POST   | `/_uix/api/me/friends/accept`          | `{ id }` → перевести pending в active (тільки якщо я — помічник цього запиту)              |
+| DELETE | `/_uix/api/me/friends/:id`             | `204` — будь-яка сторона може видалити                                                     |
+| POST   | `/_uix/api/me/friends/screenshot`      | `{ imageBase64 }` → надіслати скрін активному помічнику через SSE                          |
+| POST   | `/_uix/api/me/friends/reply`           | `{ askerId, text }` → відповідь аскеру (тільки якщо я — його активний помічник)            |
+| GET    | `/_uix/api/me/friends/stream`          | **SSE**. Події: `request`, `accepted`, `disconnected`, `screenshot`, `reply`. Keepalive 25с |
+| GET    | `/_uix/api/me/friends/check/:name`     | Перевірити, чи існує юзер з таким іменем (для UI-валідації перед запитом)                   |
+| GET    | `/_uix/api/users-public/:id`           | `{ id, name }` — публічна інфа про юзера                                                    |
 
 ### Діагностика IP / relay
 
 | Метод | Шлях                    | Опис                                                                                              |
 | ----- | ----------------------- | ------------------------------------------------------------------------------------------------- |
-| GET   | `/api/_diag/server-ip`  | IP, з якого виходить центральний сервер напряму (повз relay). Кеш 1 година                       |
-| GET   | `/api/_diag/relay-ip`   | IP, з якого виходить `forwardProxies[0]` (тобто IP ноута). Має відрізнятись від `/server-ip`     |
+| GET   | `/_uix/api/_diag/server-ip`  | IP, з якого виходить центральний сервер напряму (повз relay). Кеш 1 година                       |
+| GET   | `/_uix/api/_diag/relay-ip`   | IP, з якого виходить `forwardProxies[0]` (тобто IP ноута). Має відрізнятись від `/server-ip`     |
 
 ### Адміністратор (`isAdmin=true`)
 
 | Метод  | Шлях             | Опис                                               |
 | ------ | ---------------- | -------------------------------------------------- |
-| GET    | `/api/users`     | Список усіх                                        |
-| POST   | `/api/users`     | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
-| GET    | `/api/users/:id` | Один користувач                                    |
-| PUT    | `/api/users/:id` | Часткове оновлення                                 |
-| DELETE | `/api/users/:id` | —                                                  |
+| GET    | `/_uix/api/users`     | Список усіх                                        |
+| POST   | `/_uix/api/users`     | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
+| GET    | `/_uix/api/users/:id` | Один користувач                                    |
+| PUT    | `/_uix/api/users/:id` | Часткове оновлення                                 |
+| DELETE | `/_uix/api/users/:id` | —                                                  |
 
 ## Безпека
 
@@ -665,7 +666,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 - **Cookies таргета** з `Domain=...`, `Secure`, `SameSite=*` нормалізуються (примусово `SameSite=Lax`, без `Domain`/`Secure`). Cookie з ім'ям нашої сесії (`uix_session`) ніколи не пересилається в таргет.
 - **Path-traversal** для статики блокується перевіркою `target.startsWith(root)` у `safeJsPath` ([static.ts](scripts/server/static.ts)).
 - **Relay-аутентифікація**: ноут-relay перевіряє `X-Relay-Secret` заголовок. Без `LAPTOP_PROXY_SECRET` ноут стає **відкритим проксі** — будь-хто, хто дотягнеться до нього, може ходити куди завгодно з його IP. Завжди задавай однаковий secret на ноуті (env var перед `npm run start:laptop-proxy`) і на центральному сервері (читається з `process.env.LAPTOP_PROXY_SECRET`).
-- **SSE-канал** (`/api/me/friends/stream`) — потребує валідної сесії. Registry — in-memory `Map<userId, ServerResponse[]>`, тобто пам'ять не персистує між рестартами. Скріни друзів через SSE **не зберігаються** в БД, тільки в RAM під час передачі.
+- **SSE-канал** (`/_uix/api/me/friends/stream`) — потребує валідної сесії. Registry — in-memory `Map<userId, ServerResponse[]>`, тобто пам'ять не персистує між рестартами. Скріни друзів через SSE **не зберігаються** в БД, тільки в RAM під час передачі.
 
 ## Запуск
 
