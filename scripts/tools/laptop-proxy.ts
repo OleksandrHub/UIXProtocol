@@ -3,20 +3,10 @@ import * as https from 'node:https';
 import * as os from 'node:os';
 import { URL } from 'node:url';
 
-const PORT = Number(process.env.LAPTOP_PROXY_PORT ?? 8787);
-const SECRET = process.env.LAPTOP_PROXY_SECRET ?? '';
+const PORT = 8787;
 
 http
   .createServer((req, res) => {
-    if (SECRET) {
-      const got = req.headers['x-relay-secret'];
-      if (typeof got !== 'string' || got !== SECRET) {
-        res.writeHead(401, { 'Content-Type': 'text/plain' });
-        res.end('unauthorized');
-        return;
-      }
-    }
-
     const relayUrlRaw = req.headers['x-relay-url'];
     if (typeof relayUrlRaw !== 'string') {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
@@ -35,7 +25,6 @@ http
 
     const headers: http.OutgoingHttpHeaders = { ...req.headers };
     delete headers['x-relay-url'];
-    delete headers['x-relay-secret'];
     headers.host = target.host;
 
     const lib = target.protocol === 'https:' ? https : http;
@@ -72,12 +61,5 @@ http
           console.log(`    Network:  http://${iface.address}:${PORT}   (${name})`);
         }
       }
-    }
-    if (!SECRET) {
-      console.warn(
-        '⚠  LAPTOP_PROXY_SECRET is not set — anyone reaching this port can use ' +
-          'it as an open relay. Set the env var on the laptop and add the same ' +
-          'value to LAPTOP_PROXY_SECRET on the central server.',
-      );
     }
   });

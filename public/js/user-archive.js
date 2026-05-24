@@ -546,69 +546,148 @@ export function initArchive({ me } = {}) {
       errEl.textContent = 'PDF-бібліотека не завантажилась.';
       return;
     }
+    const h2c = window.html2canvas;
+    if (typeof h2c !== 'function') {
+      errEl.textContent = 'html2canvas не завантажився.';
+      return;
+    }
     errEl.textContent = '';
     exportPdfBtn.disabled = true;
+
+    // Offscreen stage where each question card is rendered before capture.
+    // Positioned off-viewport so it doesn't flash on screen.
+    const stage = document.createElement('div');
+    stage.style.cssText =
+      'position:fixed;left:-99999px;top:0;width:720px;font-family:system-ui,sans-serif;color:#111;background:#fff;';
+    document.body.appendChild(stage);
+
     try {
       const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
-      const margin = 40;
-      const maxW = pageW - margin * 2;
-      let y = margin;
-
-      const ensure = (h) => {
-        if (y + h > pageH - margin) {
-          doc.addPage();
-          y = margin;
-        }
-      };
-      const writeLines = (label, value, size = 11) => {
-        doc.setFontSize(size);
-        const lines = doc.splitTextToSize(`${label}${value}`, maxW);
-        lines.forEach((ln) => {
-          ensure(size + 4);
-          doc.text(ln, margin, y);
-          y += size + 4;
-        });
-      };
+      const margin = 24;
+      const innerW = pageW - margin * 2;
+      let firstPage = true;
 
       for (let i = 0; i < picked.length; i++) {
         const q = picked[i];
-        ensure(20);
-        doc.setFontSize(13);
-        doc.text(`№${i + 1}`, margin, y);
-        y += 18;
+
+        // Build a clean card in real DOM so the browser handles Cyrillic
+        // shaping. html2canvas then turns it into a raster image — jsPDF
+        // only ever sees pixels, never glyphs, so font support is moot.
+        stage.innerHTML = '';
+        const card = document.createElement('div');
+        card.style.cssText = 'padding:24px;box-sizing:border-box;';
+
+        const head = document.createElement('div');
+        head.style.cssText = 'font-size:16px;font-weight:700;margin-bottom:12px;';
+        head.textContent = `№${i + 1}`;
+        card.appendChild(head);
 
         const dataUrl = await fetchImageDataUrl(q.id);
         if (dataUrl) {
-          try {
-            const props = doc.getImageProperties(dataUrl);
-            const drawW = Math.min(maxW, props.width);
-            let drawH = (props.height * drawW) / props.width;
-            const cap = pageH - margin * 2;
-            let finalW = drawW;
-            if (drawH > cap) {
-              drawH = cap;
-              finalW = (props.width * drawH) / props.height;
+          const img = document.createElement('img');
+          img.src = dataUrl;
+          img.style.cssText =
+            'max-width:100%;display:block;margin:0 0 14px;border:1px solid #ddd;';
+          card.appendChild(img);
+          await new Promise((res) => {
+            if (img.complete) res();
+            else {
+              img.onload = res;
+              img.onerror = res;
             }
-            ensure(drawH + 8);
-            doc.addImage(dataUrl, 'JPEG', margin, y, finalW, drawH);
-            y += drawH + 10;
-          } catch {}
+          });
         }
 
-        writeLines('Питання: ', q.question || '—');
-        const opts = (q.options || []).map((o, j) => `${j + 1}. ${o}`);
-        writeLines('Варіанти: ', opts.length ? '' : '—');
-        opts.forEach((o) => writeLines('  ', o));
-        writeLines('Правильна відповідь: ', q.correctAnswer || '—');
-        y += 14;
+        const block = (label, value) => {
+          const el = document.createElement('div');
+          el.style.cssText = 'margin-bottom:10px;font-size:14px;line-height:1.45;';
+          const lab = document.createElement('strong');
+          lab.textContent = label;
+          el.appendChild(lab);
+          if (typeof value === 'string') {
+            el.appendChild(document.createTextNode(' ' + value));
+          } else {
+            el.appendChild(value);
+          }
+          card.appendChild(el);
+        };
+
+        block('Питання:', q.question || '—');
+
+        if (Array.isArray(q.options) && q.options.length) {
+          const list = document.createElement('ol');
+          list.style.cssText = 'margin:4px 0 0 22px;padding:0;font-size:14px;line-height:1.45;';
+          q.options.forEach((o) => {
+            const li = document.createElement('li');
+            li.style.cssText = 'margin-bottom:2px;';
+            li.textContent = o;
+            list.appendChild(li);
+          });
+          block('Варіанти:', list);
+        } else {
+          block('Варіанти:', '—');
+        }
+
+        block('Правильна відповідь:', q.correctAnswer || '—');
+
+        if (Array.isArray(q.tags) && q.tags.length) {
+          block('Теги:', q.tags.join(', '));
+        }
+
+        stage.appendChild(card);
+
+        const canvas = await h2c(card, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+        });
+
+        const ratio = innerW / canvas.width;
+        const drawH = canvas.height * ratio;
+        const maxH = pageH - margin * 2;
+
+        if (!firstPage) doc.addPage();
+        firstPage = false;
+
+        if (drawH <= maxH) {
+          doc.addImage(canvas.toDataURL('image/jpeg', 0.88), 'JPEG', margin, margin, innerW, drawH);
+        } else {
+          // Card is taller than one page — slice into page-sized chunks.
+          const slicePxPerPage = maxH / ratio;
+          let y = 0;
+          let firstSlice = true;
+          while (y < canvas.height) {
+            if (!firstSlice) doc.addPage();
+            firstSlice = false;
+            const sliceH = Math.min(slicePxPerPage, canvas.height - y);
+            const sub = document.createElement('canvas');
+            sub.width = canvas.width;
+            sub.height = sliceH;
+            sub
+              .getContext('2d')
+              .drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+            doc.addImage(
+              sub.toDataURL('image/jpeg', 0.88),
+              'JPEG',
+              margin,
+              margin,
+              innerW,
+              sliceH * ratio,
+            );
+            y += sliceH;
+          }
+        }
       }
 
       doc.save('questions.pdf');
     } catch (e) {
       errEl.textContent = e.message || 'Помилка генерації PDF.';
     } finally {
+      stage.remove();
       exportPdfBtn.disabled = false;
     }
   });
