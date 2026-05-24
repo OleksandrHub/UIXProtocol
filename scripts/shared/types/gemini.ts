@@ -1,4 +1,4 @@
-import type { UserFile } from './file-types';
+import type { UserFile } from './file';
 
 export interface SolveOptions {
   apiKeys: string[];
