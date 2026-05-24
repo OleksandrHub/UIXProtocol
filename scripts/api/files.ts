@@ -24,14 +24,14 @@ export async function handleFiles(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/me/files' && method === 'GET') {
+  if (path === '/me/files' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
     sendJson(res, 200, listUserFiles(me.id));
     return true;
   }
 
-  if (path === '/api/me/files' && method === 'POST') {
+  if (path === '/me/files' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ name?: string; mime?: string; dataBase64?: string }>(
@@ -52,7 +52,7 @@ export async function handleFiles(
     return true;
   }
 
-  if (path === '/api/me/files/status' && method === 'GET') {
+  if (path === '/me/files/status' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const apiKeys = (me.apiKeys ?? []).filter(Boolean);
@@ -76,7 +76,7 @@ export async function handleFiles(
     return true;
   }
 
-  if (path === '/api/me/files/preload' && method === 'POST') {
+  if (path === '/me/files/preload' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const apiKeys = (me.apiKeys ?? []).filter(Boolean);
@@ -94,7 +94,7 @@ export async function handleFiles(
     return true;
   }
 
-  const fileIdMatch = path.match(/^\/api\/me\/files\/(\d+)$/);
+  const fileIdMatch = path.match(/^\/me\/files\/(\d+)$/);
   if (fileIdMatch && method === 'DELETE') {
     const me = requireAuth(req, res);
     if (!me) return true;
@@ -108,7 +108,7 @@ export async function handleFiles(
     return true;
   }
 
-  if (path === '/api/gemini/solve' && method === 'POST') {
+  if (path === '/gemini/solve' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const contentType = String(req.headers['content-type'] ?? '');

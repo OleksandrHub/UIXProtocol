@@ -98,7 +98,7 @@ export async function handleDiag(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/_diag/server-ip' && method === 'GET') {
+  if (path === '/_diag/server-ip' && method === 'GET') {
     try {
       const ip = await fetchServerIp();
       sendJson(res, 200, { ip, probe: IP_PROBE });
@@ -108,12 +108,12 @@ export async function handleDiag(
     return true;
   }
 
-  if (path === '/api/_diag/relays' && method === 'GET') {
+  if (path === '/_diag/relays' && method === 'GET') {
     sendJson(res, 200, { relays: getRelayStatuses() });
     return true;
   }
 
-  if (path === '/api/_diag/relay-ip' && method === 'GET') {
+  if (path === '/_diag/relay-ip' && method === 'GET') {
     const healthy = getRelayStatuses().filter((r) => r.healthy);
     if (healthy.length === 0) {
       sendJson(res, 502, { error: 'no healthy relays configured' });

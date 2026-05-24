@@ -8,17 +8,21 @@ import { handleQuestions } from '../api/questions';
 import { handleAdminUsers } from '../api/admin-users';
 import { handleDiag } from '../api/diag';
 import { handleFriends } from '../api/friends';
+import { API_PREFIX } from '../shared/constants';
 
 export async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = req.url ?? '';
-  if (!url.startsWith('/api/') && url !== '/api') return false;
+  if (!url.startsWith(`${API_PREFIX}/`) && url !== API_PREFIX) return false;
 
   if (req.method === 'OPTIONS') {
     sendNoContent(res);
     return true;
   }
 
-  const path = url.split('?')[0] ?? '';
+  // Strip prefix once here so handlers can use bare paths like '/login' and
+  // not embed the namespace in every regex/comparison they own.
+  const fullPath = url.split('?')[0] ?? '';
+  const path = fullPath.slice(API_PREFIX.length) || '/';
   const method = req.method ?? 'GET';
 
   try {

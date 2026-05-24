@@ -1,6 +1,6 @@
-import { api } from './http.js';
+import { api, API_PREFIX } from './http.js';
 
-const imgUrl = (id) => `/api/me/questions/${id}/image`;
+const imgUrl = (id) => `${API_PREFIX}/me/questions/${id}/image`;
 
 function fmtDate(ts) {
   try {

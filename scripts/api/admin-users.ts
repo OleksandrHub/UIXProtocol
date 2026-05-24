@@ -32,13 +32,13 @@ export async function handleAdminUsers(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/users' && method === 'GET') {
+  if (path === '/users' && method === 'GET') {
     if (!requireAdmin(req, res)) return true;
     sendJson(res, 200, listUsers());
     return true;
   }
 
-  if (path === '/api/users' && method === 'POST') {
+  if (path === '/users' && method === 'POST') {
     if (!requireAdmin(req, res)) return true;
     const body = await readJson<{
       name?: string;
@@ -68,20 +68,20 @@ export async function handleAdminUsers(
     return true;
   }
 
-  if (path === '/api/admin/gemini-errors' && method === 'GET') {
+  if (path === '/admin/gemini-errors' && method === 'GET') {
     if (!requireAdmin(req, res)) return true;
     sendJson(res, 200, listGeminiErrors(500));
     return true;
   }
 
-  if (path === '/api/admin/gemini-errors' && method === 'DELETE') {
+  if (path === '/admin/gemini-errors' && method === 'DELETE') {
     if (!requireAdmin(req, res)) return true;
     const removed = clearGeminiErrors();
     sendJson(res, 200, { removed });
     return true;
   }
 
-  const errIdMatch = path.match(/^\/api\/admin\/gemini-errors\/(\d+)$/);
+  const errIdMatch = path.match(/^\/admin\/gemini-errors\/(\d+)$/);
   if (errIdMatch && method === 'DELETE') {
     if (!requireAdmin(req, res)) return true;
     if (deleteGeminiError(Number(errIdMatch[1]))) sendNoContent(res);
@@ -89,7 +89,7 @@ export async function handleAdminUsers(
     return true;
   }
 
-  const userIdMatch = path.match(/^\/api\/users\/(\d+)$/);
+  const userIdMatch = path.match(/^\/users\/(\d+)$/);
   if (userIdMatch) {
     if (!requireAdmin(req, res)) return true;
     const id = Number(userIdMatch[1]);

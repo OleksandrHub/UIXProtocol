@@ -74,14 +74,14 @@ export async function handleFriends(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/me/friends' && method === 'GET') {
+  if (path === '/me/friends' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
     sendJson(res, 200, listMyFriends(me.id));
     return true;
   }
 
-  if (path === '/api/me/friends/request' && method === 'POST') {
+  if (path === '/me/friends/request' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ toName?: string }>(req);
@@ -106,7 +106,7 @@ export async function handleFriends(
     return true;
   }
 
-  if (path === '/api/me/friends/accept' && method === 'POST') {
+  if (path === '/me/friends/accept' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ id?: number }>(req);
@@ -126,7 +126,7 @@ export async function handleFriends(
     return true;
   }
 
-  const removeMatch = path.match(/^\/api\/me\/friends\/(\d+)$/);
+  const removeMatch = path.match(/^\/me\/friends\/(\d+)$/);
   if (removeMatch && method === 'DELETE') {
     const me = requireAuth(req, res);
     if (!me) return true;
@@ -146,7 +146,7 @@ export async function handleFriends(
     return true;
   }
 
-  if (path === '/api/me/friends/screenshot' && method === 'POST') {
+  if (path === '/me/friends/screenshot' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ imageBase64?: string }>(req, 15_000_000);
@@ -175,7 +175,7 @@ export async function handleFriends(
     return true;
   }
 
-  if (path === '/api/me/friends/reply' && method === 'POST') {
+  if (path === '/me/friends/reply' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ askerId?: number; text?: string }>(req);
@@ -205,7 +205,7 @@ export async function handleFriends(
     return true;
   }
 
-  if (path === '/api/me/friends/stream' && method === 'GET') {
+  if (path === '/me/friends/stream' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
 
@@ -233,10 +233,10 @@ export async function handleFriends(
 
   // Frontend can ask whether a candidate name maps to a real user (avoids
   // typo-only "no such user" surprises before sending the request).
-  if (path.startsWith('/api/me/friends/check/') && method === 'GET') {
+  if (path.startsWith('/me/friends/check/') && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
-    const name = decodeURIComponent(path.slice('/api/me/friends/check/'.length));
+    const name = decodeURIComponent(path.slice('/me/friends/check/'.length));
     const u = getUserByName(name);
     if (!u || u.id === me.id) sendJson(res, 404, { error: 'not found' });
     else sendJson(res, 200, { id: u.id, name: u.name });
@@ -244,7 +244,7 @@ export async function handleFriends(
   }
 
   // Resolve a user id to its public info (asker → helper UI needs this).
-  const userInfoMatch = path.match(/^\/api\/users-public\/(\d+)$/);
+  const userInfoMatch = path.match(/^\/users-public\/(\d+)$/);
   if (userInfoMatch && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;

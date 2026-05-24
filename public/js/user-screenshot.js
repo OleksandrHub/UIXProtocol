@@ -1,6 +1,3 @@
-// Capture the visible viewport of the proxied iframe as a JPEG base64 string.
-// Shared between Gemini and friend-help flows so both produce identical images.
-
 const getFrameWindow = (frameEl) => {
   let win;
   try { win = frameEl.contentWindow; } catch { win = null; }
@@ -43,7 +40,7 @@ async function captureCanvas(frameEl) {
   const renderScale = Math.min(1.5, Math.max(1, win.devicePixelRatio || 1));
   return h2c(root, {
     useCORS: true,
-    allowTaint: true,
+    allowTaint: false,
     scale: renderScale,
     x: 0,
     y: win.scrollY || 0,

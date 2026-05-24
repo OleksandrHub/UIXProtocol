@@ -1,4 +1,4 @@
-import { api } from './http.js';
+import { api, API_PREFIX } from './http.js';
 import { captureFrameAsBase64Jpeg } from './user-screenshot.js';
 
 // Returns a controller exposing:
@@ -271,7 +271,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     if (evtSrc) {
       try { evtSrc.close(); } catch {}
     }
-    evtSrc = new EventSource('/api/me/friends/stream');
+    evtSrc = new EventSource(`${API_PREFIX}/me/friends/stream`);
     evtSrc.onmessage = (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
