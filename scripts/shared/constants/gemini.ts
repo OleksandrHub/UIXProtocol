@@ -11,10 +11,6 @@ export const KNOWN_MODELS = [
   'gemini-2.5-flash-lite',
 ] as const;
 
-// A server-controlled instruction appended after the (user-customizable)
-// prompt. It asks the model for an extra machine-readable block so we can
-// archive every question/options/correct answer without changing the short
-// answer the overlay shows.
 export const STRUCTURED_SUFFIX = `
 
 ---
@@ -22,9 +18,6 @@ ALSO, on a separate final line, output exactly one machine-readable block listin
 [[QDATA]][{"question":"<full question text>","options":["<choice 1>","<choice 2>"],"correct":"<the correct answer text or label>"}][[/QDATA]]
 Rules: valid minified JSON ARRAY, one object per question in screen order, no markdown, escape inner quotes, "options" is [] if there are no listed choices, include ALL questions if there are several, always output the block even if unsure.`;
 
-// Matches the machine-readable block parser.ts extracts (and strips) from the
-// model output. Defined here so both producer (prompt suffix) and consumer
-// (parser) reference the same delimiter shape.
 export const QDATA_RE = /\[\[QDATA\]\]\s*([\s\S]*?)\s*\[\[\/QDATA\]\]/i;
 
 export const DEFAULT_PROMPT_TEXT = `You are an expert test solver. Analyze the screenshot carefully.

@@ -1,6 +1,5 @@
 import * as fs from 'node:fs';
 import * as http from 'node:http';
-import * as https from 'node:https';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -12,7 +11,6 @@ import { LOADERIO_FILE, LOADERIO_TOKEN, PREVIEW_RE, PUBLIC_DIR } from '../shared
 import { safeJsPath, serveFile } from '../server/static';
 import { proxyForUser, proxyHandle } from '../server/proxy';
 import { initRelayPool } from '../server/relay-pool';
-import { ensureSelfSignedCert } from '../server/tls';
 import { handleUpgrade } from '../server/websocket';
 
 function serveLoaderioVerification(reqPath: string, res: http.ServerResponse): boolean {
@@ -125,25 +123,12 @@ const requestHandler = async (
 const httpServer = http.createServer(requestHandler);
 httpServer.on('upgrade', handleUpgrade);
 
-const tlsMaterial = ensureSelfSignedCert();
-const httpsServer = tlsMaterial
-  ? https.createServer({ key: tlsMaterial.key, cert: tlsMaterial.cert }, requestHandler)
-  : null;
-if (httpsServer) httpsServer.on('upgrade', handleUpgrade);
-
 void (async () => {
   await initRelayPool();
   httpServer.listen(environment.port, '0.0.0.0', () => {
     console.log(`✅  HTTP  listening on 0.0.0.0:${environment.port}`);
     console.log(`    Local:    http://localhost:${environment.port}`);
   });
-  if (httpsServer) {
-    httpsServer.listen(environment.httpsPort, '0.0.0.0', () => {
-      console.log(`✅  HTTPS listening on 0.0.0.0:${environment.httpsPort}`);
-      console.log(`    Local:    https://localhost:${environment.httpsPort}`);
-      console.log('    (self-signed cert — accept the browser warning on first visit)');
-    });
-  }
   const pruned = pruneOldGeminiErrors();
   if (pruned > 0) console.log(`[cleanup] pruned ${pruned} old gemini_errors`);
   setInterval(() => {
