@@ -264,7 +264,11 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
       try {
         await api('/me/friends/reply', {
           method: 'POST',
-          body: JSON.stringify({ askerId: currentScreenshot.askerId, text }),
+          body: JSON.stringify({
+            askerId: currentScreenshot.askerId,
+            messageId: currentScreenshot.messageId,
+            text,
+          }),
         });
         chatStatus.textContent = 'надіслано ✓';
         setTimeout(closeChat, 600);
@@ -425,6 +429,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
           askerName: msg.from?.name,
           fromName: msg.from?.name ?? '?',
           imageBase64: msg.imageBase64,
+          messageId: msg.messageId,
         });
         break;
       case 'reply':

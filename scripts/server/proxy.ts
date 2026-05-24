@@ -7,6 +7,7 @@ import { URL } from 'node:url';
 import { getUserById } from '../db';
 import { environment } from '../../environments/environment';
 import {
+  CROSS_ORIGIN_PROXY_SCRIPT,
   CROSSORIGIN_ATTR_RE,
   HEAD_RE,
   INTEGRITY_ATTR_RE,
@@ -89,9 +90,11 @@ function injectHtmlHelpers(html: string, devTools: boolean): string {
   // per-user dev-tools flag. Default is OFF: regular users get a clean console
   // and Cloudflare Turnstile widgets run their real challenge so the target
   // site's security check actually passes.
+  // CROSS_ORIGIN_PROXY_SCRIPT must run before any target-page script so that
+  // fetch/XHR are wrapped before the page issues its first cross-origin call.
   const prefix = devTools
-    ? TURNSTILE_STUB_SCRIPT + KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT
-    : KEEP_ACTIVE_SCRIPT;
+    ? CROSS_ORIGIN_PROXY_SCRIPT + TURNSTILE_STUB_SCRIPT + KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT
+    : CROSS_ORIGIN_PROXY_SCRIPT + KEEP_ACTIVE_SCRIPT;
   const hasViewport = VIEWPORT_RE.test(html);
   let body = hasViewport ? html.replace(VIEWPORT_RE, PERMISSIVE_VIEWPORT) : html;
   body = body.replace(INTEGRITY_ATTR_RE, '').replace(CROSSORIGIN_ATTR_RE, '');

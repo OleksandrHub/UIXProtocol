@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
   acceptFriendship,
+  addQuestion,
   getActiveHelperFor,
   getConnection,
   getUserById,
@@ -11,6 +12,22 @@ import {
   requestFriendship,
 } from '../db';
 import { readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
+
+// In-flight screenshots awaiting a helper reply. Keyed by messageId so that
+// when the reply arrives we can pair it with the original image and persist
+// the question into the asker's archive. TTL keeps memory bounded if the
+// helper never replies.
+const PENDING_SCREENSHOT_TTL_MS = 10 * 60 * 1000;
+const pendingScreenshots = new Map<
+  number,
+  { askerId: number; image: Buffer; mime: string; expiresAt: number }
+>();
+function gcPendingScreenshots(): void {
+  const now = Date.now();
+  for (const [id, e] of pendingScreenshots) {
+    if (e.expiresAt < now) pendingScreenshots.delete(id);
+  }
+}
 
 // ---- SSE registry ---------------------------------------------------------
 // One entry per active EventSource subscription. A user may keep more than
@@ -164,6 +181,14 @@ export async function handleFriends(
       sendJson(res, 409, { error: 'helper is offline' });
       return true;
     }
+    // Park the image so the matching reply can archive it later.
+    gcPendingScreenshots();
+    pendingScreenshots.set(messageId, {
+      askerId: me.id,
+      image: Buffer.from(body.imageBase64, 'base64'),
+      mime: 'image/jpeg',
+      expiresAt: Date.now() + PENDING_SCREENSHOT_TTL_MS,
+    });
     broadcast(conn.helperId, {
       type: 'screenshot',
       messageId,
@@ -178,7 +203,7 @@ export async function handleFriends(
   if (path === '/me/friends/reply' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
-    const body = await readJson<{ askerId?: number; text?: string }>(req);
+    const body = await readJson<{ askerId?: number; text?: string; messageId?: number }>(req);
     const askerId = Number(body.askerId);
     const text = (body.text ?? '').toString();
     if (!Number.isFinite(askerId) || askerId <= 0 || !text.trim()) {
@@ -196,6 +221,26 @@ export async function handleFriends(
       sendJson(res, 409, { error: 'asker is offline' });
       return true;
     }
+
+    // Pair the reply with the parked screenshot via messageId and persist to
+    // the asker's archive, mirroring the Gemini flow. archiveQuestions toggle
+    // on the asker still gates it.
+    const messageId = Number(body.messageId);
+    if (Number.isFinite(messageId) && messageId > 0) {
+      const pending = pendingScreenshots.get(messageId);
+      if (pending && pending.askerId === askerId) {
+        const asker = getUserById(askerId);
+        if (asker && asker.archiveQuestions !== false) {
+          try {
+            addQuestion(asker.id, pending.image, pending.mime, '', [], text.trim());
+          } catch (e) {
+            console.error('[friends] archive failed:', (e as Error).message);
+          }
+        }
+        pendingScreenshots.delete(messageId);
+      }
+    }
+
     broadcast(askerId, {
       type: 'reply',
       from: { id: me.id, name: me.name },
