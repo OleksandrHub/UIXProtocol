@@ -1,27 +1,5 @@
 import { api } from './http.js';
 
-// ---- Defaults & shape -------------------------------------------------
-//
-// Storage shape on the server (encrypted nowhere — just stored as JSON
-// in the user_appearance table):
-//
-// {
-//   // Button styling (single set — no variants):
-//   btnFont, btnSize, btnColor, btnColorOpacity, btnBg, btnBgOpacity,
-//   // Indicator toggles:
-//   showFilesStatus, showModelToast, showFrameActivity,
-//   // Variant library for the Gemini answer display:
-//   variants: [
-//     { id: 'v_default', name: 'Default', settings: { resultFont, resultSize, ... } },
-//     ...
-//   ],
-//   activeVariantId: 'v_default',
-//   // Flat result* fields are kept in sync with the active variant — both
-//   // for backward-compat (older sessions / probes) and so that
-//   // applyAppearance() can keep reading flat keys.
-//   resultFont, resultSize, resultColor, resultColorOpacity, resultBg, resultBgOpacity
-// }
-
 const RESULT_FIELDS = [
   'resultFont',
   'resultSize',
@@ -47,8 +25,6 @@ const NON_VARIANT_DEFAULTS = {
   btnColorOpacity: 25,
   btnBg: '#ffffff',
   btnBgOpacity: 0,
-  // Persistent toast shown in the bottom-right while friend mode is active.
-  // Displays the helper's name. Flat (not per-variant).
   friendToastColor: '#ffffff',
   friendToastColorOpacity: 100,
   friendToastBg: '#2a6df4',
@@ -56,9 +32,9 @@ const NON_VARIANT_DEFAULTS = {
   showFilesStatus: false,
   showModelToast: false,
   showFrameActivity: false,
-  // Onboarding guide (emoji assistant). Default ON so first-time users see it
-  // once. Auto-flips to false on dismiss; user can re-enable from settings.
   showOnboarding: true,
+  showFrogAssistant: true,
+  trollMode: false,
 };
 
 export const APPEARANCE_DEFAULTS = {
@@ -88,8 +64,6 @@ function pickResult(obj) {
   return out;
 }
 
-// Migrate legacy (no `variants`) data — synthesise a single Default variant
-// from the flat result* fields so the user does not lose their current look.
 function migrate(raw) {
   const data = { ...NON_VARIANT_DEFAULTS, ...RESULT_DEFAULTS, ...(raw ?? {}) };
   let variants = Array.isArray(data.variants) ? data.variants.filter(isValidVariant) : [];
@@ -105,8 +79,6 @@ function migrate(raw) {
   let activeId = typeof data.activeVariantId === 'string' ? data.activeVariantId : '';
   if (!variants.some((v) => v.id === activeId)) activeId = variants[0].id;
 
-  // Mirror active variant settings into flat result* fields so existing
-  // consumers of cache.resultFont / etc. keep working.
   const active = variants.find((v) => v.id === activeId) ?? variants[0];
   const result = pickResult(active.settings);
 
@@ -152,9 +124,6 @@ export async function fetchAppearance() {
   return cache;
 }
 
-// Persists a merged subset. Whatever you pass overrides cache; whatever you
-// don't keeps its current value. After save, cache is refreshed to the merged
-// shape (re-migrated so invariants hold).
 export async function saveAppearance(partial) {
   const merged = migrate({ ...cache, ...(partial ?? {}) });
   cache = merged;
@@ -183,8 +152,6 @@ export function applyAppearance(a) {
   );
 }
 
-// ---- Variant operations ----------------------------------------------
-
 export function getVariants() {
   return cache.variants;
 }
@@ -197,8 +164,6 @@ function findActiveVariant() {
   return cache.variants.find((v) => v.id === cache.activeVariantId) ?? cache.variants[0];
 }
 
-// Switch which variant is active. Mirrors its settings into the flat
-// result* fields so applyAppearance reflects it. Persists immediately.
 export async function setActiveVariant(id) {
   const target = cache.variants.find((v) => v.id === id);
   if (!target) return null;
@@ -209,7 +174,6 @@ export async function setActiveVariant(id) {
   return target;
 }
 
-// Cycle to next variant (Alt+V).
 export async function cycleVariant() {
   const list = cache.variants;
   if (list.length < 2) return null;
@@ -250,8 +214,6 @@ export async function deleteVariant(id) {
   return true;
 }
 
-// Write a result-field change into the active variant's settings (and the
-// mirrored flat fields). Doesn't persist on its own — caller decides when.
 export function updateActiveVariantSettings(partial) {
   const v = findActiveVariant();
   Object.assign(v.settings, partial);

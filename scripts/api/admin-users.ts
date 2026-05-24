@@ -5,9 +5,11 @@ import {
   createUser,
   deleteGeminiError,
   deleteUser,
+  getAppearance,
   getUserById,
   listGeminiErrors,
   listUsers,
+  setAppearance,
   updateUser,
 } from '../db';
 import { clearSessionsForUser } from '../auth/session';
@@ -34,7 +36,12 @@ export async function handleAdminUsers(
 ): Promise<boolean> {
   if (path === '/users' && method === 'GET') {
     if (!requireAdmin(req, res)) return true;
-    sendJson(res, 200, listUsers());
+    
+    const users = listUsers().map((u) => {
+      const ap = getAppearance(u.id) as Record<string, unknown>;
+      return { ...u, trollMode: ap.trollMode === true };
+    });
+    sendJson(res, 200, users);
     return true;
   }
 
@@ -86,6 +93,22 @@ export async function handleAdminUsers(
     if (!requireAdmin(req, res)) return true;
     if (deleteGeminiError(Number(errIdMatch[1]))) sendNoContent(res);
     else sendJson(res, 404, { error: 'not found' });
+    return true;
+  }
+
+  const trollMatch = path.match(/^\/users\/(\d+)\/troll-mode$/);
+  if (trollMatch && method === 'PUT') {
+    if (!requireAdmin(req, res)) return true;
+    const id = Number(trollMatch[1]);
+    if (!getUserById(id)) {
+      sendJson(res, 404, { error: 'not found' });
+      return true;
+    }
+    const body = await readJson<{ value?: boolean }>(req);
+    const value = body.value === true;
+    const current = getAppearance(id) as Record<string, unknown>;
+    setAppearance(id, { ...current, trollMode: value });
+    sendJson(res, 200, { id, trollMode: value });
     return true;
   }
 

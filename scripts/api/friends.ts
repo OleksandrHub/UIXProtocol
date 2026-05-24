@@ -13,10 +13,6 @@ import {
 } from '../db';
 import { readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
 
-// In-flight screenshots awaiting a helper reply. Keyed by messageId so that
-// when the reply arrives we can pair it with the original image and persist
-// the question into the asker's archive. TTL keeps memory bounded if the
-// helper never replies.
 const PENDING_SCREENSHOT_TTL_MS = 10 * 60 * 1000;
 const pendingScreenshots = new Map<
   number,
@@ -28,10 +24,6 @@ function gcPendingScreenshots(): void {
     if (e.expiresAt < now) pendingScreenshots.delete(id);
   }
 }
-
-// ---- SSE registry ---------------------------------------------------------
-// One entry per active EventSource subscription. A user may keep more than
-// one tab open, so we store an array per userId.
 
 const subscribers = new Map<number, ServerResponse[]>();
 
@@ -60,7 +52,7 @@ function broadcast(userId: number, event: object): void {
     try {
       res.write(payload);
     } catch {
-      // Stream is gone — will be cleaned up on its 'close' handler.
+      
     }
   }
 }
@@ -70,8 +62,6 @@ export function isUserOnline(userId: number): boolean {
   return !!list && list.length > 0;
 }
 
-// ---- Helpers --------------------------------------------------------------
-
 function openSseStream(res: ServerResponse): void {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -79,11 +69,9 @@ function openSseStream(res: ServerResponse): void {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
-  // Initial comment to flush headers immediately through any proxy in front.
+  
   res.write(': hello\n\n');
 }
-
-// ---- Route handlers -------------------------------------------------------
 
 export async function handleFriends(
   req: IncomingMessage,
@@ -117,7 +105,7 @@ export async function handleFriends(
       sendJson(res, 400, { error: result.error });
       return true;
     }
-    // Notify helper that they have a pending request.
+    
     broadcast(helper.id, { type: 'request', connection: result.connection });
     sendJson(res, 201, result.connection);
     return true;
@@ -137,7 +125,7 @@ export async function handleFriends(
       sendJson(res, 404, { error: 'not found or not allowed' });
       return true;
     }
-    // Notify the asker that the helper accepted.
+    
     broadcast(accepted.askerId, { type: 'accepted', connection: accepted });
     sendJson(res, 200, accepted);
     return true;
@@ -154,7 +142,7 @@ export async function handleFriends(
       sendJson(res, 404, { error: 'not found' });
       return true;
     }
-    // Tell the other side they were disconnected.
+    
     if (conn) {
       const otherId = conn.askerId === me.id ? conn.helperId : conn.askerId;
       broadcast(otherId, { type: 'disconnected', connectionId: id });
@@ -181,7 +169,7 @@ export async function handleFriends(
       sendJson(res, 409, { error: 'helper is offline' });
       return true;
     }
-    // Park the image so the matching reply can archive it later.
+    
     gcPendingScreenshots();
     pendingScreenshots.set(messageId, {
       askerId: me.id,
@@ -210,8 +198,7 @@ export async function handleFriends(
       sendJson(res, 400, { error: 'askerId and text required' });
       return true;
     }
-    // Validate that this reply path is allowed — me must be the active helper
-    // of askerId.
+    
     const askersHelper = getActiveHelperFor(askerId);
     if (!askersHelper || askersHelper.helperId !== me.id) {
       sendJson(res, 403, { error: 'not the active helper for this user' });
@@ -222,9 +209,6 @@ export async function handleFriends(
       return true;
     }
 
-    // Pair the reply with the parked screenshot via messageId and persist to
-    // the asker's archive, mirroring the Gemini flow. archiveQuestions toggle
-    // on the asker still gates it.
     const messageId = Number(body.messageId);
     if (Number.isFinite(messageId) && messageId > 0) {
       const pending = pendingScreenshots.get(messageId);
@@ -257,7 +241,6 @@ export async function handleFriends(
     openSseStream(res);
     subscribe(me.id, res);
 
-    // Periodic comment to keep proxies / tunnels from killing idle connection.
     const keepalive = setInterval(() => {
       try {
         res.write(`: ka ${Date.now()}\n\n`);
@@ -276,8 +259,6 @@ export async function handleFriends(
     return true;
   }
 
-  // Frontend can ask whether a candidate name maps to a real user (avoids
-  // typo-only "no such user" surprises before sending the request).
   if (path.startsWith('/me/friends/check/') && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
@@ -288,7 +269,6 @@ export async function handleFriends(
     return true;
   }
 
-  // Resolve a user id to its public info (asker → helper UI needs this).
   const userInfoMatch = path.match(/^\/users-public\/(\d+)$/);
   if (userInfoMatch && method === 'GET') {
     const me = requireAuth(req, res);

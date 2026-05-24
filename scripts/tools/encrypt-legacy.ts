@@ -1,9 +1,3 @@
-// One-time migration helper for legacy plaintext data in the SQLite DB.
-//
-// Usage:
-//   npm run encrypt-legacy
-//   npm run encrypt-legacy -- --dry-run
-
 import { encrypt, encryptBuffer, isEncrypted, isEncryptedBuffer } from '../db/cipher';
 import { db } from '../db/connection';
 

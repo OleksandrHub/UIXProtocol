@@ -42,8 +42,6 @@ export function getConnection(id: number): FriendConnection | null {
   return row ? rowToConnection(row) : null;
 }
 
-// The user can only have ONE active asker-relationship (one helper at a time).
-// Returns the active connection where this user is the asker.
 export function getActiveHelperFor(askerId: number): FriendConnection | null {
   const row = db
     .prepare(`${JOIN_SQL} WHERE c.asker_id = ? AND c.status = 'active' LIMIT 1`)
@@ -79,8 +77,6 @@ export function requestFriendship(
   return { ok: true, connection };
 }
 
-// Only the helper can accept. Returns updated connection or null if not found
-// / not allowed.
 export function acceptFriendship(connectionId: number, userId: number): FriendConnection | null {
   const conn = getConnection(connectionId);
   if (!conn || conn.helperId !== userId || conn.status !== 'pending') return null;
@@ -88,7 +84,6 @@ export function acceptFriendship(connectionId: number, userId: number): FriendCo
   return getConnection(connectionId);
 }
 
-// Either side can remove.
 export function removeFriendship(connectionId: number, userId: number): boolean {
   const conn = getConnection(connectionId);
   if (!conn) return false;

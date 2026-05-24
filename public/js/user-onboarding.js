@@ -1,22 +1,9 @@
 import { loadAppearance, saveAppearance } from './user-appearance.js';
 
-// Each step:
-//   emotion: face-happy | face-wink | face-surprised | face-thinking | face-sleeping
-//   corner:  tl | tr | bl | br | center
-//   highlight: CSS selector that should glow this step (.onboarding-target)
-//   action:  comma-separated commands, fired BEFORE the step renders:
-//              showBar | hideBar
-//              openSettings[:tab] | switchTab:name | closeSettings
-//              openArchive | closeArchive
-//              enableFriend | disableFriend
-//   demo:    one of mockAnswer:<text> | mockToast:<text> | none
-//            Demo state is auto-cleared when we leave the step / dismiss.
-//   text:    speech-bubble content. Дозволено бути довгим — bubble прокрутить.
-
 const EMOTIONS = ['face-happy', 'face-wink', 'face-surprised', 'face-thinking', 'face-sleeping'];
 
 const STEPS = [
-  // === Привіт ===
+  
   {
     emotion: 'face-happy',
     corner: 'center',
@@ -25,7 +12,6 @@ const STEPS = [
       'Зараз проведу повний тур по всьому що тут є — і ще трохи. Натисни «Далі» або × щоб назавжди мене закрити.',
   },
 
-  // === Сцена ===
   {
     emotion: 'face-surprised',
     corner: 'bl',
@@ -35,7 +21,6 @@ const STEPS = [
       'поки моя жабенятко не клікнуло F12. Спойлер: це iframe.',
   },
 
-  // === Кнопка S + Alt+G + колесо ===
   {
     emotion: 'face-happy',
     corner: 'bl',
@@ -45,7 +30,6 @@ const STEPS = [
       'Альтернатива для лінивих: Alt+колесо догори. Працює і Ctrl+wheel (для тих хто не довіряє Alt).',
   },
 
-  // === Demo: mock answer ===
   {
     emotion: 'face-thinking',
     corner: 'bl',
@@ -56,7 +40,6 @@ const STEPS = [
       'щоб ти побачив. Стиль (шрифт/колір/прозорість) — у Налаштуваннях → Вигляд.',
   },
 
-  // === Alt+H ===
   {
     emotion: 'face-wink',
     corner: 'bl',
@@ -66,7 +49,6 @@ const STEPS = [
       'Друге натискання — знову з\'являється. Як гра в "ку-ку" з підказкою.',
   },
 
-  // === Тригер меню ===
   {
     emotion: 'face-wink',
     corner: 'tl',
@@ -76,7 +58,6 @@ const STEPS = [
       'Альтернатива: Alt+M. Я завжди тицяв туди як дурний, поки не дізнався про Alt+M.',
   },
 
-  // === Меню ===
   {
     emotion: 'face-happy',
     corner: 'tr',
@@ -87,7 +68,6 @@ const STEPS = [
       'На мобільному воно випадає справа як ящик з шухлядою. Зараз пройдемося по налаштуваннях детально.',
   },
 
-  // === Налаштування → Основні (3 підкроки) ===
   {
     emotion: 'face-thinking',
     corner: 'tr',
@@ -116,7 +96,6 @@ const STEPS = [
       '(IP-проби в консолі, заглушки Turnstile). Без потреби краще не вмикати.',
   },
 
-  // === Налаштування → Промти ===
   {
     emotion: 'face-thinking',
     corner: 'tr',
@@ -127,7 +106,6 @@ const STEPS = [
       'Один активний (radio). Активний шле разом зі скрином кожним кліком. Кнопкою «+ Додати» — створюй нові.',
   },
 
-  // === Налаштування → Моделі + demo ===
   {
     emotion: 'face-thinking',
     corner: 'tr',
@@ -146,7 +124,6 @@ const STEPS = [
       'внизу-справа з ім\'ям моделі — отакий, я тобі вже намалював приклад. Тост вмикається в Вигляд → Індикатори.',
   },
 
-  // === Налаштування → Файли ===
   {
     emotion: 'face-thinking',
     corner: 'tr',
@@ -157,7 +134,6 @@ const STEPS = [
       'як контекст. Корисно для тестів за матеріалами. Жаба тестувала з 200 МБ PDF — Gemini не плаче, але повільно.',
   },
 
-  // === Налаштування → Вигляд (детально) ===
   {
     emotion: 'face-wink',
     corner: 'tr',
@@ -186,7 +162,6 @@ const STEPS = [
       'Якщо хочеш мене знову — клацни «Показувати гід-помічника». Чи навпаки — лишай вимкненим і живи в тиші.',
   },
 
-  // === Налаштування → Друзі ===
   {
     emotion: 'face-happy',
     corner: 'tr',
@@ -197,7 +172,6 @@ const STEPS = [
       'Скрін летить йому замість Gemini, він пише текст відповіді, ти бачиш. Корисно коли Gemini тупить, а друг розумніший.',
   },
 
-  // === Архів ===
   {
     emotion: 'face-surprised',
     corner: 'bl',
@@ -224,7 +198,6 @@ const STEPS = [
       'летять йому в архів. Зручно якщо хтось готується до тих самих тестів. Спойлер: усі готуються до тих самих.',
   },
 
-  // === Friend mode demo ===
   {
     emotion: 'face-wink',
     corner: 'br',
@@ -235,7 +208,6 @@ const STEPS = [
       'Після активації скрін літає твоєму помічнику. Вимикається ТІЛЬКИ через Налаштування → Друзі → «Вийти з режиму друга».',
   },
 
-  // === Hotkeys cheatsheet ===
   {
     emotion: 'face-thinking',
     corner: 'center',
@@ -252,7 +224,6 @@ const STEPS = [
       '• Quick login: на блокованому iframe — просто натисни ОДНУ літеру (перший символ пароля).',
   },
 
-  // === Sleeping outro ===
   {
     emotion: 'face-sleeping',
     corner: 'center',
@@ -263,13 +234,12 @@ const STEPS = [
   },
 ];
 
-// === Helpers ===
-
 function changeHatEmotion(emotionId) {
-  for (const id of EMOTIONS) {
-    const el = document.getElementById(id);
-    if (el) el.setAttribute('opacity', id === emotionId ? '1' : '0');
-  }
+  const root = document.getElementById('onboardingAvatar');
+  if (!root) return;
+  root.querySelectorAll('g.face').forEach((g) => {
+    g.setAttribute('opacity', g.classList.contains(emotionId) ? '1' : '0');
+  });
 }
 
 function delay(ms) {
@@ -332,9 +302,6 @@ async function runAction(spec) {
   }
 }
 
-// Demo system: temporarily mock state for a step, revert before next step
-// (or on dismiss). Avoids polluting real app state.
-
 let activeDemoTeardowns = [];
 
 function teardownDemos() {
@@ -347,7 +314,7 @@ function teardownDemos() {
 function startDemo(spec) {
   if (!spec) return;
   const [name, ...rest] = spec.split(':');
-  const arg = rest.join(':'); // preserve colons in arg
+  const arg = rest.join(':'); 
 
   if (name === 'mockAnswer') {
     const el = document.getElementById('geminiResult');
@@ -375,8 +342,6 @@ function startDemo(spec) {
     });
   }
 }
-
-// === Entry ===
 
 export function initOnboarding() {
   const a = loadAppearance();
@@ -409,7 +374,6 @@ export function initOnboarding() {
 
     const step = STEPS[i];
 
-    // Fade out, swap, run side-effects, fade back in.
     root.classList.add('is-fading');
     await delay(220);
 
@@ -422,7 +386,6 @@ export function initOnboarding() {
     progressEl.textContent = `${i + 1} / ${STEPS.length}`;
     nextBtn.textContent = i === STEPS.length - 1 ? 'Готово' : 'Далі →';
 
-    // Force layout flush so the fade-in transition actually triggers.
     void root.offsetWidth;
     root.classList.remove('is-fading');
 
@@ -436,6 +399,7 @@ export function initOnboarding() {
     clearHighlight();
     await runAction('closeSettings,closeArchive,hideBar');
     root.hidden = true;
+    window.dispatchEvent(new CustomEvent('uix:onboarding-end'));
     try {
       await saveAppearance({ showOnboarding: false });
     } catch {}
@@ -454,5 +418,6 @@ export function initOnboarding() {
   closeBtn.addEventListener('click', dismiss);
 
   root.hidden = false;
+  window.dispatchEvent(new CustomEvent('uix:onboarding-start'));
   render();
 }

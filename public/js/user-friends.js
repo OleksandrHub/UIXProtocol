@@ -1,21 +1,11 @@
 import { api, API_PREFIX } from './http.js';
 import { captureFrameAsBase64Jpeg } from './user-screenshot.js';
 
-// Returns a controller exposing:
-//   getMode():'normal'|'friend'
-//   getActiveHelperName(): string|null
-//   enableMode()                — used by Alt+F + Д button (no-op if already on)
-//   disableMode()               — invoked from Settings, never from hotkey
-//   triggerScreenshot()         — used by Alt+G / wheel-up in friend mode
-//   refreshFriendsPanel(root)   — re-renders the Друзі panel content
-//   destroy()
 export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   const frameEl = document.getElementById('frame');
   let mode = 'normal';
   let lists = { asAsker: [], asHelper: [], pendingIncoming: [], pendingOutgoing: [] };
   let busy = false;
-
-  // ---- Lists ------------------------------------------------------------
 
   async function refreshLists() {
     try {
@@ -32,15 +22,12 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     }
   }
 
-  // ---- Settings panel ---------------------------------------------------
-
   let panelRoot = null;
 
   function renderPanel(root) {
     panelRoot = root;
     root.innerHTML = '';
 
-    // Outgoing request input
     const requestBlock = document.createElement('div');
     requestBlock.className = 'friends-block';
     requestBlock.innerHTML = `
@@ -106,7 +93,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
       return b;
     };
 
-    // Incoming pending (someone asked YOU to be their helper)
     const incomingBlock = section('Запити на допомогу (вам)', lists.pendingIncoming, (c) =>
       itemRow(c.askerName, [
         button('Прийняти', 'is-primary', async () => {
@@ -128,7 +114,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     );
     if (incomingBlock) root.appendChild(incomingBlock);
 
-    // Outgoing pending (you asked someone — waiting for them to accept)
     const outgoingBlock = section('Очікують підтвердження', lists.pendingOutgoing, (c) =>
       itemRow(`${c.helperName} (чекає підтвердження)`, [
         button('Відкликати', '', async () => {
@@ -139,9 +124,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     );
     if (outgoingBlock) root.appendChild(outgoingBlock);
 
-    // Active: I am the asker → my helper. While friend mode is active, the
-    // user can only exit it from here (per design — neither Alt+F nor the
-    // floating Д button toggles it off).
     const askerBlock = section('Мій помічник', lists.asAsker, (c) => {
       const actions = [];
       if (mode === 'friend' && lists.asAsker[0]?.id === c.id) {
@@ -159,7 +141,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     });
     if (askerBlock) root.appendChild(askerBlock);
 
-    // Active: I am the helper → people I help
     const helperBlock = section('Я допомагаю', lists.asHelper, (c) =>
       itemRow(c.askerName, [
         button('Відключити', '', async () => {
@@ -183,8 +164,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     }
   }
 
-  // ---- Helper-side chat modal ------------------------------------------
-
   const chatModal = document.getElementById('friendChat');
   const chatImg = document.getElementById('friendChatImg');
   const chatImageWrap = document.getElementById('friendChatImageWrap');
@@ -196,7 +175,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   const chatFullscreenBtn = document.getElementById('friendChatFullscreen');
   const chatFullscreenExitBtn = document.getElementById('friendChatFullscreenExit');
   const chatStatus = document.getElementById('friendChatStatus');
-  let currentScreenshot = null; // { askerId, askerName, imageBase64 }
+  let currentScreenshot = null;
 
   function openChat(payload) {
     currentScreenshot = payload;
@@ -230,8 +209,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     if (!chatImg || !chatImg.complete) return;
     chatStatus.textContent = 'копіюю…';
     try {
-      // JPEG → canvas → PNG blob. Clipboard API only reliably accepts PNG
-      // across browsers; jpeg through it works on Chromium but not Firefox.
       const canvas = document.createElement('canvas');
       canvas.width = chatImg.naturalWidth;
       canvas.height = chatImg.naturalHeight;
@@ -289,7 +266,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     });
   }
 
-  // Global Esc handler: only exits fullscreen if it's the foreground concern.
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (chatImageWrap?.classList.contains('is-fullscreen')) {
@@ -298,14 +274,12 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     }
   });
 
-  // ---- Incoming request confirmation modal -----------------------------
-
   const requestModal = document.getElementById('friendRequest');
   const requestFromEl = document.getElementById('friendRequestFromName');
   const requestStatusEl = document.getElementById('friendRequestStatus');
   const requestAcceptBtn = document.getElementById('friendRequestAccept');
   const requestDeclineBtn = document.getElementById('friendRequestDecline');
-  let pendingRequest = null; // { id, askerName }
+  let pendingRequest = null;
 
   function openRequestModal(connection) {
     if (!requestModal) return;
@@ -350,13 +324,10 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
         closeRequestModal();
         await refreshLists();
       } catch {
-        // Even if server delete fails, hide the modal — user clearly wants out.
         closeRequestModal();
       }
     });
   }
-
-  // ---- Trigger screenshot (asker side, friend mode) ---------------------
 
   async function triggerScreenshot() {
     if (busy) return;
@@ -388,8 +359,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     geminiResultEl.hidden = false;
   }
 
-  // ---- SSE subscription -------------------------------------------------
-
   let evtSrc = null;
   let retryTimer = null;
 
@@ -404,8 +373,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
       handleEvent(msg);
     };
     evtSrc.onerror = () => {
-      // EventSource auto-reconnects, but if the server returns 401 it stops.
-      // Force a manual reconnect after a delay.
       clearTimeout(retryTimer);
       retryTimer = setTimeout(connectStream, 5000);
     };
@@ -417,11 +384,15 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
         refreshLists();
         if (msg.connection) openRequestModal(msg.connection);
         else showHint?.('новий запит на допомогу');
+        window.dispatchEvent(new CustomEvent('uix:frog', { detail: { reaction: 'friendRequest' } }));
         break;
       case 'accepted':
       case 'disconnected':
         refreshLists();
-        if (msg.type === 'accepted') showHint?.(`помічник підключився: ${msg.connection?.helperName ?? '?'}`);
+        if (msg.type === 'accepted') {
+          showHint?.(`помічник підключився: ${msg.connection?.helperName ?? '?'}`);
+          window.dispatchEvent(new CustomEvent('uix:frog', { detail: { reaction: 'friendAccepted' } }));
+        }
         break;
       case 'screenshot':
         openChat({
@@ -434,9 +405,8 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
         break;
       case 'reply':
         showResult(msg.text || '—');
+        window.dispatchEvent(new CustomEvent('uix:frog', { detail: { reaction: 'friendReply' } }));
         break;
-      default:
-        // ignore
     }
   }
 

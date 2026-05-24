@@ -109,8 +109,6 @@ export function deleteQuestion(userId: number, id: number): boolean {
   return info.changes > 0;
 }
 
-// Copies the selected questions (owned by fromUserId) to toUserId as fresh,
-// independently-editable rows. Returns how many were shared.
 export function shareQuestions(
   fromUserId: number,
   toUserId: number,

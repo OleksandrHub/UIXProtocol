@@ -1,11 +1,5 @@
-// Emoji-assistant onboarding guide. Floats bottom-left of the page, lives
-// above the iframe content. Hidden by default; user-onboarding.js shows it
-// on first run and persists dismissal into appearance settings.
-
 .onboarding {
-  // Position controlled by .is-{tl,tr,bl,br,center} corner classes — JS
-  // swaps them per step. Fade-out → swap → fade-in keeps the "jumping"
-  // feel without needing pixel-accurate transitions between top/bottom.
+  
   position: fixed;
   z-index: 110;
   display: flex;
@@ -81,13 +75,11 @@
     height: 100%;
     display: block;
 
-    // Smooth fade when emotion swaps so we don't get a hard pop.
     g[id^='face-'] {
       transition: opacity 0.25s ease;
     }
   }
 
-  // Blinking terminal cursor above the frog's head for the "hacker" vibe.
   &__cursor {
     animation: onboarding-blink 1s steps(2, end) infinite;
   }
@@ -105,8 +97,6 @@
     line-height: 1.45;
     color: #1a1a1a;
 
-    // Tail pointing at the avatar — top: 24px works for any corner since
-    // the avatar (96px tall) overlaps the bubble's top region either way.
     &::before {
       content: '';
       position: absolute;
@@ -121,8 +111,6 @@
     }
   }
 
-  // When avatar sits on the right (is-tr, is-br = row-reverse), flip the
-  // bubble's tail to its right edge with the opposite border pair.
   &.is-tr .onboarding__bubble::before,
   &.is-br .onboarding__bubble::before {
     left: auto;
@@ -208,8 +196,6 @@
   50% { opacity: 0; }
 }
 
-// Glowing pulse on whichever element the current step is teaching about.
-// Uses outline (off-flow, doesn't affect layout) + box-shadow for the glow.
 .onboarding-target {
   outline: 3px solid rgba(249, 211, 66, 0.95);
   outline-offset: 4px;
@@ -233,7 +219,7 @@
 @media (max-width: 640px) {
   .onboarding {
     left: 0.5rem;
-    // Sit above the floating Д button (bottom: 14px, height: 48px).
+    
     bottom: 5rem;
 
     &__avatar {

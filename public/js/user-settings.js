@@ -212,6 +212,7 @@ export function initSettings({
     showModelToast: document.getElementById('apShowModelToast'),
     showFrameActivity: document.getElementById('apShowFrameActivity'),
     showOnboarding: document.getElementById('apShowOnboarding'),
+    showFrogAssistant: document.getElementById('apShowFrogAssistant'),
   };
   const apOut = {
     resultColorOpacity: document.getElementById('apResultColorOpacityOut'),
@@ -252,11 +253,11 @@ export function initSettings({
     ap.showModelToast.checked = a.showModelToast === true;
     ap.showFrameActivity.checked = a.showFrameActivity === true;
     ap.showOnboarding.checked = a.showOnboarding === true;
+    ap.showFrogAssistant.checked = a.showFrogAssistant !== false;
     updateOpacityLabels();
     renderVariantSelect();
   };
 
-  // ---- Variants UI ----
   const variantSelect = document.getElementById('variantSelect');
   const variantAddBtn = document.getElementById('variantAdd');
   const variantRenameBtn = document.getElementById('variantRename');
@@ -351,6 +352,7 @@ export function initSettings({
     showModelToast: ap.showModelToast.checked,
     showFrameActivity: ap.showFrameActivity.checked,
     showOnboarding: ap.showOnboarding.checked,
+    showFrogAssistant: ap.showFrogAssistant.checked,
   });
 
   const RESULT_KEYS = new Set([
@@ -365,8 +367,7 @@ export function initSettings({
   Object.entries(ap).forEach(([key, el]) => {
     const handler = async () => {
       updateOpacityLabels();
-      // Result-* edits write into the active variant so it's the variant
-      // that survives, not just the flat snapshot.
+      
       if (RESULT_KEYS.has(key)) {
         const collected = collectAppearance();
         const variantPartial = {};
