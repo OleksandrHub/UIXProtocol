@@ -1,0 +1,250 @@
+// Emoji-assistant onboarding guide. Floats bottom-left of the page, lives
+// above the iframe content. Hidden by default; user-onboarding.js shows it
+// on first run and persists dismissal into appearance settings.
+
+.onboarding {
+  // Position controlled by .is-{tl,tr,bl,br,center} corner classes — JS
+  // swaps them per step. Fade-out → swap → fade-in keeps the "jumping"
+  // feel without needing pixel-accurate transitions between top/bottom.
+  position: fixed;
+  z-index: 110;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+
+  &.is-fading {
+    opacity: 0;
+  }
+
+  &.is-center {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    align-items: center;
+  }
+  &.is-tl {
+    top: 4rem;
+    left: 1rem;
+    right: auto;
+    bottom: auto;
+    align-items: flex-start;
+  }
+  &.is-tr {
+    top: 4rem;
+    right: 1rem;
+    left: auto;
+    bottom: auto;
+    align-items: flex-start;
+    flex-direction: row-reverse;
+  }
+  &.is-bl {
+    bottom: 1rem;
+    left: 1rem;
+    top: auto;
+    right: auto;
+    align-items: flex-end;
+  }
+  &.is-br {
+    bottom: 1rem;
+    right: 1rem;
+    top: auto;
+    left: auto;
+    align-items: flex-end;
+    flex-direction: row-reverse;
+  }
+
+  &[hidden] {
+    display: none;
+  }
+
+  &__avatar {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 96px;
+    pointer-events: auto;
+    user-select: none;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.25));
+    transition: transform 0.2s ease;
+    animation: onboarding-bob 3s ease-in-out infinite;
+
+    &:hover {
+      transform: scale(1.08);
+    }
+  }
+
+  &__frog {
+    width: 100%;
+    height: 100%;
+    display: block;
+
+    // Smooth fade when emotion swaps so we don't get a hard pop.
+    g[id^='face-'] {
+      transition: opacity 0.25s ease;
+    }
+  }
+
+  // Blinking terminal cursor above the frog's head for the "hacker" vibe.
+  &__cursor {
+    animation: onboarding-blink 1s steps(2, end) infinite;
+  }
+
+  &__bubble {
+    position: relative;
+    pointer-events: auto;
+    max-width: 320px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 12px 14px 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    font-size: 13px;
+    line-height: 1.45;
+    color: #1a1a1a;
+
+    // Tail pointing at the avatar — top: 24px works for any corner since
+    // the avatar (96px tall) overlaps the bubble's top region either way.
+    &::before {
+      content: '';
+      position: absolute;
+      left: -7px;
+      top: 24px;
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border-left: 1px solid rgba(0, 0, 0, 0.1);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      transform: rotate(45deg);
+    }
+  }
+
+  // When avatar sits on the right (is-tr, is-br = row-reverse), flip the
+  // bubble's tail to its right edge with the opposite border pair.
+  &.is-tr .onboarding__bubble::before,
+  &.is-br .onboarding__bubble::before {
+    left: auto;
+    right: -7px;
+    border-left: none;
+    border-bottom: none;
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  &__close {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    color: rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+
+    &:hover {
+      color: rgba(0, 0, 0, 0.8);
+    }
+  }
+
+  &__text {
+    margin-right: 18px;
+    min-height: 1.5em;
+    white-space: pre-wrap;
+  }
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  &__progress {
+    flex: 1 1 auto;
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.45);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__skip,
+  &__next {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    background: #fafafa;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    color: inherit;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+  }
+
+  &__next {
+    background: #2a6df4;
+    border-color: #2a6df4;
+    color: #fff;
+
+    &:hover {
+      filter: brightness(1.1);
+    }
+  }
+}
+
+@keyframes onboarding-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes onboarding-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+// Glowing pulse on whichever element the current step is teaching about.
+// Uses outline (off-flow, doesn't affect layout) + box-shadow for the glow.
+.onboarding-target {
+  outline: 3px solid rgba(249, 211, 66, 0.95);
+  outline-offset: 4px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 8px rgba(249, 211, 66, 0.18);
+  animation: onboarding-pulse 1.4s ease-in-out infinite;
+  transition: outline-color 0.2s, box-shadow 0.2s;
+}
+
+@keyframes onboarding-pulse {
+  0%, 100% {
+    outline-color: rgba(249, 211, 66, 0.95);
+    box-shadow: 0 0 0 8px rgba(249, 211, 66, 0.18);
+  }
+  50% {
+    outline-color: rgba(249, 211, 66, 0.4);
+    box-shadow: 0 0 0 14px rgba(249, 211, 66, 0.06);
+  }
+}
+
+@media (max-width: 640px) {
+  .onboarding {
+    left: 0.5rem;
+    // Sit above the floating Д button (bottom: 14px, height: 48px).
+    bottom: 5rem;
+
+    &__avatar {
+      width: 64px;
+      height: 64px;
+    }
+
+    &__bubble {
+      max-width: 78vw;
+      font-size: 12px;
+      padding: 10px 12px 8px;
+    }
+  }
+}

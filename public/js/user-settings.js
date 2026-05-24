@@ -211,6 +211,7 @@ export function initSettings({
     showFilesStatus: document.getElementById('apShowFilesStatus'),
     showModelToast: document.getElementById('apShowModelToast'),
     showFrameActivity: document.getElementById('apShowFrameActivity'),
+    showOnboarding: document.getElementById('apShowOnboarding'),
   };
   const apOut = {
     resultColorOpacity: document.getElementById('apResultColorOpacityOut'),
@@ -250,6 +251,7 @@ export function initSettings({
     ap.showFilesStatus.checked = a.showFilesStatus === true;
     ap.showModelToast.checked = a.showModelToast === true;
     ap.showFrameActivity.checked = a.showFrameActivity === true;
+    ap.showOnboarding.checked = a.showOnboarding === true;
     updateOpacityLabels();
     renderVariantSelect();
   };
@@ -348,6 +350,7 @@ export function initSettings({
     showFilesStatus: ap.showFilesStatus.checked,
     showModelToast: ap.showModelToast.checked,
     showFrameActivity: ap.showFrameActivity.checked,
+    showOnboarding: ap.showOnboarding.checked,
   });
 
   const RESULT_KEYS = new Set([

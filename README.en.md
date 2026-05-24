@@ -6,16 +6,29 @@ A lightweight reverse proxy with multi-user authentication and an optional Gemin
 >
 > ⚠ **This English doc is out of date** for recent features. The Ukrainian
 > [README.md](README.md) is the source of truth and covers:
+> - All backend API routes are namespaced under `/_uix/api/*` (prefix lives
+>   in [scripts/shared/constants/api.ts](scripts/shared/constants/api.ts)) so
+>   they can't collide with `/api/*` paths of the proxied target site
 > - Multi-laptop forward-proxy / IP rotation (`forwardProxies`, SSH reverse
 >   tunnel `ssh -R 8787:localhost:8787 root@<central>`, cloudflared/ngrok
 >   alternatives, `npm run start:laptop-proxy`)
-> - Friend-help mode (Alt+F / `Д` button, SSE real-time chat, settings tab
->   "Друзі", endpoints `/api/me/friends/*` + `/api/me/friends/stream`)
-> - Appearance variants for Gemini answers (Alt+R, multiple named presets
+> - Friend-help mode (Alt+F desktop / floating `Д` button on mobile, SSE
+>   real-time chat with image copy + fullscreen, persistent friend-name
+>   toast, in-modal "Прийняти/Відхилити" on incoming requests, automatic
+>   archive entry on helper reply pairing image + answer via `messageId`)
+> - Appearance variants for Gemini answers (Alt+V, multiple named presets
 >   inside `user_appearance.data`)
 > - Gemini now uses **only the active model** (no fallback to other enabled
 >   models — fallback stays between API keys only)
-> - Customizable colors for the friend-toggle button's active state
+> - Onboarding guide (🤖 emoji assistant, 8-step walkthrough on first run,
+>   toggle in "Appearance" settings)
+> - Cross-origin XHR/fetch interception inside the iframe so Google Forms
+>   (and other targets that load gstatic.com / cdn.* via XHR) work without
+>   CORS errors — see `CROSS_ORIGIN_PROXY_SCRIPT` in
+>   [scripts/shared/constants/proxy-scripts.ts](scripts/shared/constants/proxy-scripts.ts)
+> - Cyrillic-safe PDF export from Archive (renders questions via
+>   html2canvas-pro into image-pages instead of jsPDF text, which doesn't
+>   ship a Cyrillic font)
 >
 > Until this English file is synced, refer to the Ukrainian README for the
 > authoritative architecture & API descriptions.
@@ -78,15 +91,15 @@ scripts/
 | [scripts/server/static.ts](scripts/server/static.ts) | `serveFile`, `safeJsPath` — local-file streaming |
 | [scripts/server/proxy.ts](scripts/server/proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — reverse proxy and preview mode |
 
-**REST API (`/api/*`):**
+**REST API (`/_uix/api/*`):**
 
 | File | Purpose |
 | --- | --- |
 | [scripts/api/router.ts](scripts/api/router.ts) | Dispatcher: tries each handler group in order |
 | [scripts/api/helpers.ts](scripts/api/helpers.ts) | `readJson`, `sendJson`, `getCurrentUser`, `requireAuth` |
-| [scripts/api/auth.ts](scripts/api/auth.ts) | login / logout / `/api/me` / `/api/config` / `/api/users/by-name` |
+| [scripts/api/auth.ts](scripts/api/auth.ts) | login / logout / `/_uix/api/me` / `/_uix/api/config` / `/_uix/api/users/by-name` |
 | [scripts/api/me.ts](scripts/api/me.ts) | User settings: URL, keys, password, prompts, models |
-| [scripts/api/files.ts](scripts/api/files.ts) | `/api/me/files/*` (CRUD/status/preload) + `/api/gemini/solve` |
+| [scripts/api/files.ts](scripts/api/files.ts) | `/_uix/api/me/files/*` (CRUD/status/preload) + `/_uix/api/gemini/solve` |
 | [scripts/api/questions.ts](scripts/api/questions.ts) | Question archive: list, add, edit, share |
 | [scripts/api/admin-users.ts](scripts/api/admin-users.ts) | Admin CRUD over users |
 
@@ -139,7 +152,7 @@ JS and HTML for each page are split by concern — the entry file imports submod
 `user.js` module breakdown:
 
 - [public/js/user.js](public/js/user.js) — entry, `enterAuthed`, `installFavicon`, `installShortcuts`, `initLogin`, `initModelToast`, `shortModel`
-- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_DEFAULTS`, `loadAppearance` (in-memory cache), `fetchAppearance`/`saveAppearance` (via `GET/PUT /api/me/appearance`), `applyAppearance`, `hexToRgba`
+- [public/js/user-appearance.js](public/js/user-appearance.js) — `APPEARANCE_DEFAULTS`, `loadAppearance` (in-memory cache), `fetchAppearance`/`saveAppearance` (via `GET/PUT /_uix/api/me/appearance`), `applyAppearance`, `hexToRgba`
 - [public/js/user-gemini.js](public/js/user-gemini.js) — `initGemini` (iframe screenshot + Gemini call via `html2canvas`)
 - [public/js/user-files-status.js](public/js/user-files-status.js) — `initFilesStatus` (file-status badge + warm-up button)
 - [public/js/user-settings.js](public/js/user-settings.js) — `initSettings` (tabbed modal: general, prompts, models, files, appearance)
@@ -167,7 +180,7 @@ HTML and CSS sources live outside `public/` and compile into it:
 - `/_p/<id>/...` — preview proxy for unauthenticated visitors (target cookies are dropped, a `uix_preview` cookie is set)
 - `/style.css` (+ `/style.css.map`) and `/favicon.ico` — static assets from `public/`
 - `/js/*` — client modules from `public/js/`
-- `/api/*` — REST (see below)
+- `/_uix/api/*` — REST (see below)
 - everything else — fallback proxy (for absolute paths inside proxied HTML)
 
 ## Server modules — key functions
@@ -187,13 +200,13 @@ HTML and CSS sources live outside `public/` and compile into it:
   2. `Referer` starts with `/_p/<id>/` → preview for that `id`
   3. Cookie `uix_preview` → preview for that `id`
   4. Otherwise → `403`
-- `server.ts` itself is just `http.createServer` plus a flat chain of `if`s sieving `/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/`, and `/`. Anything else falls into `proxyHandle`.
+- `server.ts` itself is just `http.createServer` plus a flat chain of `if`s sieving `/_uix/api/*`, `/favicon.ico`, `/style.css`, `/js/*`, `/_p/<id>/`, `/admin`, `/<id>/`, and `/`. Anything else falls into `proxyHandle`.
 
 ### `api/` — `router.ts` (dispatcher) + the other route groups
 
-`handleApi(req, res)` returns `true` if the request was handled as `/api/*`, otherwise `false` and control falls back to the `server/server.ts` router. The dispatcher itself is tiny: it tries `handleAuth` → `handleMe` → `handleFiles` → `handleQuestions` → `handleAdminUsers` and the first one to return `true` wins. Otherwise — `404`.
+`handleApi(req, res)` returns `true` if the request was handled as `/_uix/api/*`, otherwise `false` and control falls back to the `server/server.ts` router. The dispatcher itself is tiny: it tries `handleAuth` → `handleMe` → `handleFiles` → `handleQuestions` → `handleAdminUsers` and the first one to return `true` wins. Otherwise — `404`.
 
-Bodies are read via `readJson<T>()` ([helpers.ts](scripts/api/helpers.ts)) with a 1 MB limit (30 MB for `POST /api/me/files`, 15 MB for `/api/gemini/solve` because of the base64 image). Errors serialise to `{ error: "..." }` via `sendJson(res, status, body)`.
+Bodies are read via `readJson<T>()` ([helpers.ts](scripts/api/helpers.ts)) with a 1 MB limit (30 MB for `POST /_uix/api/me/files`, 15 MB for `/_uix/api/gemini/solve` because of the base64 image). Errors serialise to `{ error: "..." }` via `sendJson(res, status, body)`.
 
 `requireAuth(req, res)` (shared by `api-me`/`api-files`) returns the `User` or `null`, having already replied `401`. [admin-users.ts](scripts/api/admin-users.ts) layers on `requireAdmin(req, res)`, which also checks `isAdmin`.
 
@@ -302,7 +315,7 @@ If a request to one (model, key) pair fails, the URI cache for that key is reset
 
 Flow:
 
-1. `GET /api/me`.
+1. `GET /_uix/api/me`.
 2. If `me.id === id` (authenticated as this exact user) → `enterAuthed()`.
 3. Otherwise → `initLogin()` — quick login.
 
@@ -310,25 +323,25 @@ Flow:
 
 - Shows the top-bar with the user name plus "Settings", "Admin" (admins only), "Logout".
 - Wires up `barTrigger` (an invisible 44×44 click zone in the top-right corner) → click toggles the menu.
-- `GET /api/config` → sets `allow="..."` on the iframe per `iframePermissions`, then `frame.src = proxyBase` (`/_p/`) unless this is a redirect right after login (`fromLogin=true` — the iframe already shows the target).
+- `GET /_uix/api/config` → sets `allow="..."` on the iframe per `iframePermissions`, then `frame.src = proxyBase` (`/_p/`) unless this is a redirect right after login (`fromLogin=true` — the iframe already shows the target).
 - Imports `initGemini()` ([user-gemini.js](public/js/user-gemini.js)), `initFilesStatus()` ([user-files-status.js](public/js/user-files-status.js)), `initSettings()` ([user-settings.js](public/js/user-settings.js)). Registers shortcuts / wheel and attaches `frame.addEventListener('load', syncMetaFromFrame)` to mirror the target's title/favicon.
-- On entry, fetches the saved appearance from the server (`fetchAppearance` → `GET /api/me/appearance`) and applies it via CSS variables (`applyAppearance` from [user-appearance.js](public/js/user-appearance.js)).
+- On entry, fetches the saved appearance from the server (`fetchAppearance` → `GET /_uix/api/me/appearance`) and applies it via CSS variables (`applyAppearance` from [user-appearance.js](public/js/user-appearance.js)).
 - The settings dialog saves through several PUTs — only changed fields: `/me/url`, `/me/api-keys`, `/me/password`, `/me/prompts`, `/me/models`, `/me/appearance`. Files are uploaded/deleted live via `/me/files`.
 
 `initLogin()`:
 
 - Sets `frame.src = "/_p/<id>/"` so the user already sees the target before logging in (preview mode).
-- Reveals a hidden `<input type="password" maxLength="1">`. The `input` event fires `POST /api/login/<id>/quick` with the single character as soon as the field has exactly one char.
+- Reveals a hidden `<input type="password" maxLength="1">`. The `input` event fires `POST /_uix/api/login/<id>/quick` with the single character as soon as the field has exactly one char.
 - On error: adds `wrong shake` (CSS shake animation) and refocuses.
 
 ### `/` — full login ([public/js/login.js](public/js/login.js))
 
-Plain `name + password` form → `POST /api/login` → redirect to `/<user.id>/`.
+Plain `name + password` form → `POST /_uix/api/login` → redirect to `/<user.id>/`.
 
 ### `/admin` ([public/js/admin.js](public/js/admin.js), [public/js/admin-login.js](public/js/admin-login.js))
 
-- If you're not an admin, the server returns `admin-login.html` with a `POST /api/admin/login` form. After success — `location.reload()` and the server returns `admin.html`.
-- The admin panel: a user table (id, name, admin, target, key count), a "Create / Edit" form, and `DELETE /api/users/:id` guarded with `confirm()`.
+- If you're not an admin, the server returns `admin-login.html` with a `POST /_uix/api/admin/login` form. After success — `location.reload()` and the server returns `admin.html`.
+- The admin panel: a user table (id, name, admin, target, key count), a "Create / Edit" form, and `DELETE /_uix/api/users/:id` guarded with `confirm()`.
 - The table render and `removeUser` live in [admin-users.js](public/js/admin-users.js) (`setupUsers({ tbody, errEl, fieldId, setEdit }) → { refresh }`); the form and its `setEdit` stay in `admin.js`.
 - During edit: an empty "Password" field keeps the existing password; API keys — one per line.
 
@@ -345,7 +358,7 @@ Plain `name + password` form → `POST /api/login` → redirect to `/<user.id>/`
 | `Alt+G` | Take an iframe screenshot and send to Gemini          | `triggerGemini()`                                                                                                  |
 | `Alt+H` | Show/hide the last Gemini answer                      | `toggleResult()`                                                                                                   |
 | `Alt+M` | Show/hide the top-bar menu                            | `toggleBar()`                                                                                                      |
-| `Alt+C` | Cycle the active Gemini model to the next enabled one | `cycleModel()` — `PUT /api/me/active-model`, the short name briefly appears in `#modelToast` (bottom-right corner) |
+| `Alt+C` | Cycle the active Gemini model to the next enabled one | `cycleModel()` — `PUT /_uix/api/me/active-model`, the short name briefly appears in `#modelToast` (bottom-right corner) |
 
 For a cross-origin iframe target, `frame.contentDocument` will be `null` and only the outer-window listener fires. Gemini itself also requires same-origin access (the screenshot is built from the iframe's DOM via `html2canvas`).
 
@@ -374,13 +387,13 @@ Buttons:
 
 - **User name** — plain text.
 - **Settings** — opens a tabbed modal:
-  - **General**: site URL → `PUT /api/me/url`, API keys → `PUT /api/me/api-keys`, new password (empty — keep current) → `PUT /api/me/password`.
-  - **Prompts**: any number of named prompts, one chosen as active (radio). Persisted as `prompts` + `active_prompt_id` via `PUT /api/me/prompts`.
-  - **Models**: checkboxes over `KNOWN_MODELS`, a radio for the active model, plus a hint about `Alt+C`. Saved via `PUT /api/me/models`.
-  - **Files**: arbitrary attachments (PDF, images, text, audio, video, …) forwarded to Gemini as context. Add via `POST /api/me/files` (base64, MIME picked by the browser), delete via `DELETE /api/me/files/:id`.
-  - **Appearance**: separately for the Gemini result and the `S` button — font, size, text color, background color + a "transparent background" checkbox. Live preview via CSS variables; saved server-side in the `user_appearance` table via `PUT /api/me/appearance`. Changes apply immediately (CSS variables); "Cancel" restores the last saved set (from the in-memory cache). The "show files status"/"show model toast" checkboxes are pushed to the server as soon as they're toggled.
+  - **General**: site URL → `PUT /_uix/api/me/url`, API keys → `PUT /_uix/api/me/api-keys`, new password (empty — keep current) → `PUT /_uix/api/me/password`.
+  - **Prompts**: any number of named prompts, one chosen as active (radio). Persisted as `prompts` + `active_prompt_id` via `PUT /_uix/api/me/prompts`.
+  - **Models**: checkboxes over `KNOWN_MODELS`, a radio for the active model, plus a hint about `Alt+C`. Saved via `PUT /_uix/api/me/models`.
+  - **Files**: arbitrary attachments (PDF, images, text, audio, video, …) forwarded to Gemini as context. Add via `POST /_uix/api/me/files` (base64, MIME picked by the browser), delete via `DELETE /_uix/api/me/files/:id`.
+  - **Appearance**: separately for the Gemini result and the `S` button — font, size, text color, background color + a "transparent background" checkbox. Live preview via CSS variables; saved server-side in the `user_appearance` table via `PUT /_uix/api/me/appearance`. Changes apply immediately (CSS variables); "Cancel" restores the last saved set (from the in-memory cache). The "show files status"/"show model toast" checkboxes are pushed to the server as soon as they're toggled.
 - **Admin** — link to `/admin` (visible only when `isAdmin=true`).
-- **Logout** — `POST /api/logout`, then redirect to `/`.
+- **Logout** — `POST /_uix/api/logout`, then redirect to `/`.
 
 ### Gemini panel
 
@@ -408,7 +421,7 @@ Client side (`initGemini` in [public/js/user-gemini.js](public/js/user-gemini.js
 2. `ensureHtml2Canvas(win)` — injects [html2canvas 1.4.1](https://html2canvas.hertzen.com/) from CDN into `iframe.contentDocument` (the outer page already has it, included via `<script>` in [pages/user.html](pages/user.html)).
 3. `captureFrame()` — `html2canvas` with `useCORS`, `allowTaint`. Captures the **full site width** (`documentElement.scrollWidth`, with `x: 0`) but only the **viewport height** (`innerHeight`, with `y: scrollY`) — so if the proxied site is wider than the phone screen, everything past the right edge is included in the screenshot, while vertically it's just the area around the current scroll position.
 4. `canvasToBase64Jpeg()` — downscales to **1600 px** width, JPEG quality **0.7**, base64.
-5. `POST /api/gemini/solve` with just `imageBase64`. The active prompt, active model, and file attachments are pulled from the user record on the server.
+5. `POST /_uix/api/gemini/solve` with just `imageBase64`. The active prompt, active model, and file attachments are pulled from the user record on the server.
 6. The answer is rendered into `.gemini-result`.
 
 Server side ([files.ts](scripts/api/files.ts) → [gemini.ts](scripts/gemini/index.ts)):
@@ -454,41 +467,41 @@ All responses are JSON. Errors use `{ "error": "..." }`. The `uix_session` cooki
 
 | Method | Path                       | Description                                                                         |
 | ------ | -------------------------- | ----------------------------------------------------------------------------------- |
-| POST   | `/api/login`               | `{name, password}`                                                                  |
-| POST   | `/api/login/:id`           | `{password}` — login by id                                                          |
-| POST   | `/api/login/:id/quick`     | `{char}` — quick login by first character                                           |
-| POST   | `/api/admin/login`         | Same as `/api/login`, rejects non-admins                                            |
-| POST   | `/api/logout`              | —                                                                                   |
-| GET    | `/api/me`                  | Current user (includes `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
-| GET    | `/api/config`              | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }`                      |
-| GET    | `/api/users/by-name/:name` | `{ id, name, targetUrl }`                                                           |
+| POST   | `/_uix/api/login`               | `{name, password}`                                                                  |
+| POST   | `/_uix/api/login/:id`           | `{password}` — login by id                                                          |
+| POST   | `/_uix/api/login/:id/quick`     | `{char}` — quick login by first character                                           |
+| POST   | `/_uix/api/admin/login`         | Same as `/_uix/api/login`, rejects non-admins                                            |
+| POST   | `/_uix/api/logout`              | —                                                                                   |
+| GET    | `/_uix/api/me`                  | Current user (includes `prompts`, `activePromptId`, `enabledModels`, `activeModel`) |
+| GET    | `/_uix/api/config`              | `{ proxyPath, iframePermissions, knownModels, defaultPrompt }`                      |
+| GET    | `/_uix/api/users/by-name/:name` | `{ id, name, targetUrl }`                                                           |
 
 ### User (session required)
 
 | Method | Path                   | Body / response                                                                       |
 | ------ | ---------------------- | ------------------------------------------------------------------------------------- |
-| PUT    | `/api/me/url`          | `{ url: string }`                                                                     |
-| PUT    | `/api/me/password`     | `{ password: string }`                                                                |
-| PUT    | `/api/me/api-keys`     | `{ apiKeys: string[] }`                                                               |
-| PUT    | `/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                              |
-| PUT    | `/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (filtered against `KNOWN_MODELS`) |
-| PUT    | `/api/me/active-model` | `{ activeModel: string }` — must be in `enabledModels`                                |
-| GET    | `/api/me/appearance`   | JSON object with appearance settings (`{}` if nothing saved yet)                      |
-| PUT    | `/api/me/appearance`   | Full JSON appearance object → written to `user_appearance.data`                       |
-| GET    | `/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                 |
-| POST   | `/api/me/files`        | `{ name, mime, dataBase64 }` → file metadata (30 MB cap)                              |
-| DELETE | `/api/me/files/:id`    | `204`, also clears the URI cache in `gemini/cache.ts`                                       |
-| POST   | `/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Prompt / models / PDFs come from the DB     |
+| PUT    | `/_uix/api/me/url`          | `{ url: string }`                                                                     |
+| PUT    | `/_uix/api/me/password`     | `{ password: string }`                                                                |
+| PUT    | `/_uix/api/me/api-keys`     | `{ apiKeys: string[] }`                                                               |
+| PUT    | `/_uix/api/me/prompts`      | `{ prompts: {id,name,text}[], activePromptId?: string }`                              |
+| PUT    | `/_uix/api/me/models`       | `{ enabledModels: string[], activeModel?: string }` (filtered against `KNOWN_MODELS`) |
+| PUT    | `/_uix/api/me/active-model` | `{ activeModel: string }` — must be in `enabledModels`                                |
+| GET    | `/_uix/api/me/appearance`   | JSON object with appearance settings (`{}` if nothing saved yet)                      |
+| PUT    | `/_uix/api/me/appearance`   | Full JSON appearance object → written to `user_appearance.data`                       |
+| GET    | `/_uix/api/me/files`        | `[{id, name, mime, size, createdAt}]`                                                 |
+| POST   | `/_uix/api/me/files`        | `{ name, mime, dataBase64 }` → file metadata (30 MB cap)                              |
+| DELETE | `/_uix/api/me/files/:id`    | `204`, also clears the URI cache in `gemini/cache.ts`                                       |
+| POST   | `/_uix/api/gemini/solve`    | `{ imageBase64: string }` → `{ answer }`. Prompt / models / PDFs come from the DB     |
 
 ### Admin (`isAdmin=true`)
 
 | Method | Path             | Description                                        |
 | ------ | ---------------- | -------------------------------------------------- |
-| GET    | `/api/users`     | List all                                           |
-| POST   | `/api/users`     | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
-| GET    | `/api/users/:id` | Single user                                        |
-| PUT    | `/api/users/:id` | Partial update                                     |
-| DELETE | `/api/users/:id` | —                                                  |
+| GET    | `/_uix/api/users`     | List all                                           |
+| POST   | `/_uix/api/users`     | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
+| GET    | `/_uix/api/users/:id` | Single user                                        |
+| PUT    | `/_uix/api/users/:id` | Partial update                                     |
+| DELETE | `/_uix/api/users/:id` | —                                                  |
 
 ## Security
 

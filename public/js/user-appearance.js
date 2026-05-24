@@ -56,6 +56,9 @@ const NON_VARIANT_DEFAULTS = {
   showFilesStatus: false,
   showModelToast: false,
   showFrameActivity: false,
+  // Onboarding guide (emoji assistant). Default ON so first-time users see it
+  // once. Auto-flips to false on dismiss; user can re-enable from settings.
+  showOnboarding: true,
 };
 
 export const APPEARANCE_DEFAULTS = {
