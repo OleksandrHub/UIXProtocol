@@ -5,10 +5,6 @@
 //   npm run decrypt -- --user 1             dump one user's decrypted fields
 //   npm run decrypt -- --questions 1        dump a user's decrypted questions
 //
-// Uses the same key as the server (UIX_DB_KEY env var or db-secret.key file),
-// so it must be run on the machine that holds that key. The token / --b64
-// modes work standalone; the DB is only opened for --user / --questions.
-
 import { decrypt, decryptBuffer } from '../db/cipher';
 
 function usage(): never {
@@ -24,7 +20,6 @@ function usage(): never {
   process.exit(1);
 }
 
-// Lazily required so token/b64 modes never load the native sqlite binding.
 function getDb() {
   return require('../db/connection').db as import('better-sqlite3').Database;
 }
@@ -73,6 +68,5 @@ if (flag === '--b64') {
     );
   }
 } else {
-  // Treat the first argument as a raw text token.
   console.log(decrypt(flag!));
 }

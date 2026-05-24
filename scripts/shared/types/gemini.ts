@@ -33,8 +33,6 @@ export interface UploadedFile {
   expiresAt: number;
 }
 
-// Row shape from the gemini_uploads table — narrows the columns selected by
-// `getStoredUpload` so callers don't have to keep snake_case strings inline.
 export interface GeminiUploadRow {
   uri: string;
   mime_type: string;
