@@ -20,15 +20,13 @@ def(Document.prototype,'webkitVisibilityState','visible');
 def(Document.prototype,'mozVisibilityState','visible');
 def(Document.prototype,'msVisibilityState','visible');
 
-// Block only the Page Lifecycle freeze event so the browser doesn't discard
-// the iframe when the tab is backgrounded. visibilitychange / blur / pagehide
-// / offline keep firing — those are real-user signals Cloudflare expects to
-// see, and suppressing them is a bot tell.
-var origAdd=EventTarget.prototype.addEventListener;
-EventTarget.prototype.addEventListener=function(type,listener,options){
-  if(typeof type==='string'&&type.toLowerCase()==='freeze'&&(this===D||this===W))return;
-  return origAdd.call(this,type,listener,options);
-};
+// Page Lifecycle freeze events are intercepted at the document level via
+// capture + stopImmediatePropagation. Avoids touching EventTarget.prototype
+// — that override looked like an automation tell to some forms (Google
+// Forms in particular) and they'd silently disable input handlers.
+var swallow=function(e){try{e.stopImmediatePropagation();}catch(_){}};
+D.addEventListener('freeze',swallow,true);
+W.addEventListener('freeze',swallow,true);
 }catch(e){}})();</script>`;
 
 export const IP_DIAG_SCRIPT = `<script data-uix-ipdiag>(function(){
