@@ -15,7 +15,8 @@ const ensureHtml2Canvas = async (win) => {
   }
   await new Promise((resolve, reject) => {
     const s = win.document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+
+    s.src = 'https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/dist/html2canvas-pro.min.js';
     s.onload = resolve;
     s.onerror = () => reject(new Error('html2canvas не завантажився'));
     win.document.head.appendChild(s);
