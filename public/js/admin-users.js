@@ -35,12 +35,24 @@ export function setupUsers({ tbody, errEl, fieldId, setEdit }) {
     }
   }
 
+  async function toggleTroll(id, nextValue) {
+    try {
+      await api(`/users/${id}/troll-mode`, {
+        method: 'PUT',
+        body: JSON.stringify({ value: nextValue }),
+      });
+      await refresh();
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+  }
+
   function renderUsers(users) {
     tbody.replaceChildren();
     if (!users.length) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 6;
+      td.colSpan = 7;
       td.textContent = 'Немає користувачів';
       tr.appendChild(td);
       tbody.appendChild(tr);
@@ -54,10 +66,19 @@ export function setupUsers({ tbody, errEl, fieldId, setEdit }) {
       const url = el('td', u.targetUrl || '—');
       url.classList.add('truncate');
       const keys = el('td', String(u.apiKeys.length));
+      const troll = document.createElement('td');
+      const trollOn = u.trollMode === true;
+      troll.appendChild(
+        btn(
+          trollOn ? 'ВКЛ — вимкнути' : 'викл — увімкнути',
+          () => toggleTroll(u.id, !trollOn),
+          trollOn ? 'danger' : '',
+        ),
+      );
       const actions = document.createElement('td');
       actions.appendChild(btn('Редагувати', () => setEdit(u)));
       actions.appendChild(btn('Видалити', () => removeUser(u.id), 'danger'));
-      tr.append(id, name, admin, url, keys, actions);
+      tr.append(id, name, admin, url, keys, troll, actions);
       tbody.appendChild(tr);
     }
   }

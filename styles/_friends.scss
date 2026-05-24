@@ -1,5 +1,3 @@
-// ===== Friends settings panel =====
-
 .friends-panel {
   display: flex;
   flex-direction: column;
@@ -124,8 +122,6 @@
   font-style: italic;
 }
 
-// ===== Variants bar (Alt+V) =====
-
 .variants-bar {
   display: flex;
   align-items: center;
@@ -160,13 +156,6 @@
   }
 }
 
-// ===== Friend toggle button (Д) — floating, mobile-only =====
-// Sits in the bottom-right corner on touch devices as the only way to enter
-// friend mode there (desktop uses Alt+F). Hidden on hover-capable pointers
-// because the keyboard shortcut covers that case. Also hidden via `hidden`
-// attribute by JS while friend mode is active (per spec 3.2 / 3.3 — exit is
-// only via Settings).
-
 .friend-toggle-floating {
   position: fixed;
   right: 14px;
@@ -187,15 +176,12 @@
   }
 }
 
-// Hide on devices that have a precise pointer (mouse): friend mode is
-// entered via Alt+F there. Coarse-pointer (touch) keeps the button.
 @media (pointer: fine) {
   .friend-toggle-floating {
     display: none;
   }
 }
 
-// ===== Friend name toast (persistent in friend mode) =====
 .friend-toast {
   position: fixed;
   right: 0.6rem;
@@ -215,8 +201,6 @@
     display: none;
   }
 }
-
-// ===== Friend chat modal =====
 
 .friend-chat__header {
   display: flex;
@@ -255,7 +239,6 @@
   margin-bottom: 12px;
   background: #fff;
 
-  // Fullscreen mode: image fills the whole viewport over a dim backdrop.
   &.is-fullscreen {
     position: fixed;
     inset: 0;
@@ -320,7 +303,6 @@
   }
 }
 
-// ===== Friend request confirmation modal =====
 .friend-request__body {
   margin: 0 0 12px;
   font-size: 14px;

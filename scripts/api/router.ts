@@ -19,8 +19,6 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
     return true;
   }
 
-  // Strip prefix once here so handlers can use bare paths like '/login' and
-  // not embed the namespace in every regex/comparison they own.
   const fullPath = url.split('?')[0] ?? '';
   const path = fullPath.slice(API_PREFIX.length) || '/';
   const method = req.method ?? 'GET';

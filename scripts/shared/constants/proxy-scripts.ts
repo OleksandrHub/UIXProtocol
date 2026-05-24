@@ -30,9 +30,6 @@ D.addEventListener('freeze',swallow,true);
 W.addEventListener('freeze',swallow,true);
 }catch(e){}})();</script>`;
 
-// Routes cross-origin fetch / XHR through our same-origin proxy so the iframe
-// can talk to third-party CDNs (gstatic.com for Google Forms, etc.) without
-// running into CORS. Same-origin requests pass through untouched.
 export const CROSS_ORIGIN_PROXY_SCRIPT = `<script data-uix-xoproxy>(function(){try{
 var origin=location.origin;
 var prefix='${PROXY_PREFIX}/';

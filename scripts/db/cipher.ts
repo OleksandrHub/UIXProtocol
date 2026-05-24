@@ -1,13 +1,3 @@
-// Reversible field-level encryption for sensitive DB columns.
-//
-// Usage:
-//   const enc = encrypt('my secret');   // -> "enc:v1:<base64>"
-//   const raw = decrypt(enc);           // -> "my secret"
-//
-// decrypt() is migration-safe: a value that is not in the encrypted
-// format is returned unchanged, so existing plaintext rows keep working
-// and get encrypted on their next write.
-
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 
@@ -37,7 +27,7 @@ function loadKey(): Buffer {
     const saved = fs.readFileSync(DB_KEY_PATH);
     if (saved.length === 32) return saved;
   } catch {
-    // file missing — fall through to generation
+    
   }
 
   const key = crypto.randomBytes(32);
@@ -58,7 +48,7 @@ export function isEncrypted(value: string): boolean {
 }
 
 export function encrypt(plaintext: string): string {
-  if (isEncrypted(plaintext)) return plaintext; // idempotent
+  if (isEncrypted(plaintext)) return plaintext; 
   const iv = crypto.randomBytes(IV_LEN);
   const cipher = crypto.createCipheriv(ALGO, KEY, iv);
   const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
@@ -67,7 +57,7 @@ export function encrypt(plaintext: string): string {
 }
 
 export function decrypt(value: string): string {
-  if (!isEncrypted(value)) return value; // legacy plaintext — return as-is
+  if (!isEncrypted(value)) return value; 
   try {
     const blob = Buffer.from(value.slice(PREFIX.length), 'base64');
     const iv = blob.subarray(0, IV_LEN);
@@ -86,7 +76,7 @@ export function isEncryptedBuffer(buf: Buffer): boolean {
 }
 
 export function encryptBuffer(plain: Buffer): Buffer {
-  if (isEncryptedBuffer(plain)) return plain; // idempotent
+  if (isEncryptedBuffer(plain)) return plain; 
   const iv = crypto.randomBytes(IV_LEN);
   const cipher = crypto.createCipheriv(ALGO, KEY, iv);
   const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
@@ -95,7 +85,7 @@ export function encryptBuffer(plain: Buffer): Buffer {
 }
 
 export function decryptBuffer(buf: Buffer): Buffer {
-  if (!isEncryptedBuffer(buf)) return buf; // legacy plaintext blob — return as-is
+  if (!isEncryptedBuffer(buf)) return buf; 
   try {
     const body = buf.subarray(MAGIC.length);
     const iv = body.subarray(0, IV_LEN);

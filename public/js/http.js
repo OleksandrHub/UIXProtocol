@@ -1,5 +1,3 @@
-// Must stay in sync with API_PREFIX in scripts/shared/constants/api.ts.
-// Two copies because frontend JS isn't built from the same TS module graph.
 export const API_PREFIX = '/_uix/api';
 
 export async function api(p, opts = {}) {

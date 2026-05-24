@@ -1,10 +1,3 @@
-// Manual decryption helper.
-//
-//   npm run decrypt -- "enc:v1:...."        decrypt a single text token
-//   npm run decrypt -- --b64 "<base64>"     decrypt a base64-encoded BLOB token
-//   npm run decrypt -- --user 1             dump one user's decrypted fields
-//   npm run decrypt -- --questions 1        dump a user's decrypted questions
-//
 import { decrypt, decryptBuffer } from '../db/cipher';
 
 function usage(): never {

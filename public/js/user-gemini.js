@@ -32,10 +32,12 @@ export function initGemini() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
       showResult(data?.answer || '—');
+      window.dispatchEvent(new CustomEvent('uix:frog', { detail: { reaction: 'geminiAnswer' } }));
       onAfterSolve?.();
     } catch (e) {
       console.error('[screenshot]', e);
       showResult('e');
+      window.dispatchEvent(new CustomEvent('uix:frog', { detail: { reaction: 'geminiError' } }));
     } finally {
       busy = false;
       btn.disabled = false;
@@ -53,8 +55,6 @@ export function initGemini() {
       resultEl.hidden = true;
     }
   };
-
-  // user.js binds the click handler after wiring friend-mode routing.
 
   return {
     triggerGemini,

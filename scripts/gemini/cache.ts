@@ -17,8 +17,6 @@ import type { UploadedFile, UserFile } from '../shared/types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// In-flight uploads stay in memory: a Promise can't survive a process restart
-// and we only need to dedupe concurrent uploads within a single Node process.
 const pendingUploads = new Map<string, Promise<UploadedFile>>();
 
 function cacheKey(apiKey: string, fileId: number): string {

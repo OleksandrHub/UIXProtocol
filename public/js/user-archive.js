@@ -554,8 +554,6 @@ export function initArchive({ me } = {}) {
     errEl.textContent = '';
     exportPdfBtn.disabled = true;
 
-    // Offscreen stage where each question card is rendered before capture.
-    // Positioned off-viewport so it doesn't flash on screen.
     const stage = document.createElement('div');
     stage.style.cssText =
       'position:fixed;left:-99999px;top:0;width:720px;font-family:system-ui,sans-serif;color:#111;background:#fff;';
@@ -572,9 +570,6 @@ export function initArchive({ me } = {}) {
       for (let i = 0; i < picked.length; i++) {
         const q = picked[i];
 
-        // Build a clean card in real DOM so the browser handles Cyrillic
-        // shaping. html2canvas then turns it into a raster image — jsPDF
-        // only ever sees pixels, never glyphs, so font support is moot.
         stage.innerHTML = '';
         const card = document.createElement('div');
         card.style.cssText = 'padding:24px;box-sizing:border-box;';
@@ -656,7 +651,6 @@ export function initArchive({ me } = {}) {
         if (drawH <= maxH) {
           doc.addImage(canvas.toDataURL('image/jpeg', 0.88), 'JPEG', margin, margin, innerW, drawH);
         } else {
-          // Card is taller than one page — slice into page-sized chunks.
           const slicePxPerPage = maxH / ratio;
           let y = 0;
           let firstSlice = true;

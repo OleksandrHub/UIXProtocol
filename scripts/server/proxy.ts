@@ -26,7 +26,6 @@ import { pickRelay, reportRelayFailure } from './relay-pool';
 import { HostStripStream } from './stream-rewrite';
 import type { ProxyOpts } from '../shared/types';
 
-
 function rewriteAllUrls(text: string, targetHost: string): string {
   const tHostLower = targetHost.toLowerCase();
   const absRe = new RegExp(`https?://${tHostLower.replace(/\./g, '\\.')}`, 'gi');
@@ -86,12 +85,7 @@ function buildClientForwarding(req: http.IncomingMessage): {
 }
 
 function injectHtmlHelpers(html: string, devTools: boolean): string {
-  // Diagnostic injections (IP probes + Turnstile stub) are gated behind the
-  // per-user dev-tools flag. Default is OFF: regular users get a clean console
-  // and Cloudflare Turnstile widgets run their real challenge so the target
-  // site's security check actually passes.
-  // CROSS_ORIGIN_PROXY_SCRIPT must run before any target-page script so that
-  // fetch/XHR are wrapped before the page issues its first cross-origin call.
+  
   const prefix = devTools
     ? CROSS_ORIGIN_PROXY_SCRIPT + TURNSTILE_STUB_SCRIPT + KEEP_ACTIVE_SCRIPT + IP_DIAG_SCRIPT
     : CROSS_ORIGIN_PROXY_SCRIPT + KEEP_ACTIVE_SCRIPT;
@@ -120,12 +114,7 @@ function performProxy(
   userId: number | null,
   opts: ProxyOpts = {}
 ): void {
-  // Service Worker registration always carries the `Service-Worker: script`
-  // request header. If we proxied the real SW, the browser would register it
-  // against our origin, where it would intercept future navigation and cache
-  // target-bound responses on the wrong host. Returning an empty JS lets
-  // `navigator.serviceWorker.register()` resolve cleanly while the SW does
-  // nothing (no fetch handler, no caching, no install).
+  
   if (req.headers['service-worker'] === 'script') {
     res.writeHead(200, {
       'Content-Type': 'application/javascript; charset=utf-8',
@@ -288,10 +277,7 @@ function performProxy(
       stream.on('error', onDecodeError);
 
       if (isJs) {
-        // JS responses can be megabytes (Moodle/Angular bundles). Streaming
-        // through HostStripStream avoids buffering the whole file: chunks are
-        // rewritten and forwarded as they arrive, with a small overlap to
-        // catch matches that straddle a chunk boundary.
+        
         delete headers['content-encoding'];
         delete headers['content-length'];
         res.writeHead(proxyRes.statusCode ?? 502, headers);
@@ -299,9 +285,6 @@ function performProxy(
         return;
       }
 
-      // HTML still buffers: we need the full document to find <head> and
-      // inject viewport / activity / (optional) dev-tools scripts. HTML is
-      // typically 10-200KB so the buffering cost is negligible.
       const chunks: Buffer[] = [];
       stream.on('data', (c: Buffer) => chunks.push(c));
       stream.on('end', () => {

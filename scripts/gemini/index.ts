@@ -74,8 +74,6 @@ export async function solveWithGemini(options: SolveOptions): Promise<SolveResul
       : options.prompt + STRUCTURED_SUFFIX,
   };
 
-  // Race all keys in parallel — first success wins, rate-limited keys
-  // don't block faster ones. Trades extra quota for latency.
   const errors: Array<{ apiKey: string; message: string }> = [];
   let resolved = false;
 

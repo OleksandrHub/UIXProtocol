@@ -13,6 +13,7 @@ import { initSettings } from './user-settings.js';
 import { initArchive } from './user-archive.js';
 import { initFriends } from './user-friends.js';
 import { initOnboarding } from './user-onboarding.js';
+import { initFrogAssistant } from './user-frog.js';
 
 const id = Number(location.pathname.split('/').filter(Boolean)[0]);
 if (!Number.isFinite(id)) location.href = '/';
@@ -54,8 +55,6 @@ function initModelToast() {
   };
 }
 
-// Persistent toast for the active helper's name. Visible only while
-// friend mode is on; styled via --friend-toast-* CSS variables.
 function initFriendToast() {
   const el = document.getElementById('friendToast');
   return {
@@ -108,8 +107,7 @@ async function enterAuthed(me, { fromLogin }) {
 
   const friendToggleBtn = document.getElementById('friendToggleBtn');
   const screenshotBtnEl = document.getElementById('screenshotBtn');
-  // Reveal floating Д button on first paint — CSS hides it on desktop, so
-  // it's only ever clickable on mobile.
+  
   if (friendToggleBtn) friendToggleBtn.hidden = false;
 
   const friends = initFriends({
@@ -117,9 +115,7 @@ async function enterAuthed(me, { fromLogin }) {
     geminiResultEl: document.getElementById('geminiResult'),
     onModeChange: (m, helperName) => {
       const isFriend = m === 'friend';
-      // Friend toggle button is only an "enter" trigger — exit lives in
-      // Settings (per spec 3.3). So we hide the button entirely once mode is
-      // on, and re-show it on exit.
+      
       if (friendToggleBtn) friendToggleBtn.hidden = isFriend;
       if (screenshotBtnEl) {
         screenshotBtnEl.title = isFriend
@@ -135,7 +131,6 @@ async function enterAuthed(me, { fromLogin }) {
     friendToggleBtn.addEventListener('click', () => friends.enableMode());
   }
 
-  // S-кнопка / Alt+G / wheel-up: Gemini в normal-режимі, screenshot до друга в friend-режимі.
   const triggerScreenshot = () => {
     if (friends.getMode() === 'friend') friends.triggerScreenshot();
     else gemini.triggerGemini();
@@ -216,6 +211,7 @@ async function enterAuthed(me, { fromLogin }) {
   });
 
   initArchive({ me });
+  initFrogAssistant({ name: me.name });
   initOnboarding();
 }
 
