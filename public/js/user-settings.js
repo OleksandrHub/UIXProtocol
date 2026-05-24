@@ -204,10 +204,10 @@ export function initSettings({
     btnColorOpacity: document.getElementById('apBtnColorOpacity'),
     btnBg: document.getElementById('apBtnBg'),
     btnBgOpacity: document.getElementById('apBtnBgOpacity'),
-    friendActiveColor: document.getElementById('apFriendActiveColor'),
-    friendActiveColorOpacity: document.getElementById('apFriendActiveColorOpacity'),
-    friendActiveBg: document.getElementById('apFriendActiveBg'),
-    friendActiveBgOpacity: document.getElementById('apFriendActiveBgOpacity'),
+    friendToastColor: document.getElementById('apFriendToastColor'),
+    friendToastColorOpacity: document.getElementById('apFriendToastColorOpacity'),
+    friendToastBg: document.getElementById('apFriendToastBg'),
+    friendToastBgOpacity: document.getElementById('apFriendToastBgOpacity'),
     showFilesStatus: document.getElementById('apShowFilesStatus'),
     showModelToast: document.getElementById('apShowModelToast'),
     showFrameActivity: document.getElementById('apShowFrameActivity'),
@@ -217,8 +217,8 @@ export function initSettings({
     resultBgOpacity: document.getElementById('apResultBgOpacityOut'),
     btnColorOpacity: document.getElementById('apBtnColorOpacityOut'),
     btnBgOpacity: document.getElementById('apBtnBgOpacityOut'),
-    friendActiveColorOpacity: document.getElementById('apFriendActiveColorOpacityOut'),
-    friendActiveBgOpacity: document.getElementById('apFriendActiveBgOpacityOut'),
+    friendToastColorOpacity: document.getElementById('apFriendToastColorOpacityOut'),
+    friendToastBgOpacity: document.getElementById('apFriendToastBgOpacityOut'),
   };
 
   const updateOpacityLabels = () => {
@@ -226,8 +226,8 @@ export function initSettings({
     apOut.resultBgOpacity.textContent = `${ap.resultBgOpacity.value}%`;
     apOut.btnColorOpacity.textContent = `${ap.btnColorOpacity.value}%`;
     apOut.btnBgOpacity.textContent = `${ap.btnBgOpacity.value}%`;
-    apOut.friendActiveColorOpacity.textContent = `${ap.friendActiveColorOpacity.value}%`;
-    apOut.friendActiveBgOpacity.textContent = `${ap.friendActiveBgOpacity.value}%`;
+    apOut.friendToastColorOpacity.textContent = `${ap.friendToastColorOpacity.value}%`;
+    apOut.friendToastBgOpacity.textContent = `${ap.friendToastBgOpacity.value}%`;
   };
 
   const populateAppearance = (a) => {
@@ -243,10 +243,10 @@ export function initSettings({
     ap.btnColorOpacity.value = a.btnColorOpacity ?? 100;
     ap.btnBg.value = a.btnBg || '#ffffff';
     ap.btnBgOpacity.value = a.btnBgOpacity ?? 0;
-    ap.friendActiveColor.value = a.friendActiveColor || '#ffffff';
-    ap.friendActiveColorOpacity.value = a.friendActiveColorOpacity ?? 100;
-    ap.friendActiveBg.value = a.friendActiveBg || '#2a6df4';
-    ap.friendActiveBgOpacity.value = a.friendActiveBgOpacity ?? 100;
+    ap.friendToastColor.value = a.friendToastColor || '#ffffff';
+    ap.friendToastColorOpacity.value = a.friendToastColorOpacity ?? 100;
+    ap.friendToastBg.value = a.friendToastBg || '#2a6df4';
+    ap.friendToastBgOpacity.value = a.friendToastBgOpacity ?? 90;
     ap.showFilesStatus.checked = a.showFilesStatus === true;
     ap.showModelToast.checked = a.showModelToast === true;
     ap.showFrameActivity.checked = a.showFrameActivity === true;
@@ -341,10 +341,10 @@ export function initSettings({
     btnColorOpacity: Number(ap.btnColorOpacity.value),
     btnBg: ap.btnBg.value,
     btnBgOpacity: Number(ap.btnBgOpacity.value),
-    friendActiveColor: ap.friendActiveColor.value,
-    friendActiveColorOpacity: Number(ap.friendActiveColorOpacity.value),
-    friendActiveBg: ap.friendActiveBg.value,
-    friendActiveBgOpacity: Number(ap.friendActiveBgOpacity.value),
+    friendToastColor: ap.friendToastColor.value,
+    friendToastColorOpacity: Number(ap.friendToastColorOpacity.value),
+    friendToastBg: ap.friendToastBg.value,
+    friendToastBgOpacity: Number(ap.friendToastBgOpacity.value),
     showFilesStatus: ap.showFilesStatus.checked,
     showModelToast: ap.showModelToast.checked,
     showFrameActivity: ap.showFrameActivity.checked,

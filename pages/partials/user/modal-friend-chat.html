@@ -3,10 +3,32 @@
     <div class="friend-chat__header">
       <h2>Допомога другу</h2>
       <span id="friendChatFrom" class="friend-chat__from"></span>
+      <button
+        type="button"
+        id="friendChatCopy"
+        class="friend-chat__icon-btn"
+        title="Копіювати зображення в буфер обміну"
+        aria-label="Копіювати зображення"
+      >📋</button>
+      <button
+        type="button"
+        id="friendChatFullscreen"
+        class="friend-chat__icon-btn"
+        title="Розгорнути зображення"
+        aria-label="Розгорнути зображення"
+      >⛶</button>
       <button type="button" id="friendChatClose" class="friend-chat__close" aria-label="Закрити">×</button>
     </div>
-    <div class="friend-chat__image-wrap">
+    <div class="friend-chat__image-wrap" id="friendChatImageWrap">
       <img id="friendChatImg" class="friend-chat__image" alt="скріншот" />
+      <button
+        type="button"
+        id="friendChatFullscreenExit"
+        class="friend-chat__fullscreen-exit"
+        title="Закрити повний екран (Esc)"
+        aria-label="Закрити повний екран"
+        hidden
+      >×</button>
     </div>
     <label class="friend-chat__reply">
       Відповідь

@@ -53,6 +53,24 @@ function initModelToast() {
   };
 }
 
+// Persistent toast for the active helper's name. Visible only while
+// friend mode is on; styled via --friend-toast-* CSS variables.
+function initFriendToast() {
+  const el = document.getElementById('friendToast');
+  return {
+    show(name) {
+      if (!el) return;
+      el.textContent = name ? `друг: ${name}` : 'режим друга';
+      el.hidden = false;
+    },
+    hide() {
+      if (!el) return;
+      el.hidden = true;
+      el.textContent = '';
+    },
+  };
+}
+
 async function enterAuthed(me, { fromLogin }) {
   applyAppearance(await fetchAppearance());
 
@@ -81,6 +99,7 @@ async function enterAuthed(me, { fromLogin }) {
   document.getElementById('geminiPanel').hidden = false;
   const gemini = initGemini();
   const showModelToast = initModelToast();
+  const friendToast = initFriendToast();
   const filesStatus = initFilesStatus();
   filesStatus.refresh();
   const frameActivity = initFrameActivity({ frame });
@@ -88,28 +107,31 @@ async function enterAuthed(me, { fromLogin }) {
 
   const friendToggleBtn = document.getElementById('friendToggleBtn');
   const screenshotBtnEl = document.getElementById('screenshotBtn');
+  // Reveal floating Д button on first paint — CSS hides it on desktop, so
+  // it's only ever clickable on mobile.
+  if (friendToggleBtn) friendToggleBtn.hidden = false;
+
   const friends = initFriends({
     me,
     geminiResultEl: document.getElementById('geminiResult'),
     onModeChange: (m, helperName) => {
       const isFriend = m === 'friend';
-      if (friendToggleBtn) {
-        friendToggleBtn.classList.toggle('is-active', isFriend);
-        friendToggleBtn.title = isFriend
-          ? `Режим друга увімкнено${helperName ? ` → ${helperName}` : ''}. Натисни щоб вимкнути.`
-          : 'Увімкнути режим Друг (Alt+F). Скрін полетить помічнику замість Gemini.';
-      }
+      // Friend toggle button is only an "enter" trigger — exit lives in
+      // Settings (per spec 3.3). So we hide the button entirely once mode is
+      // on, and re-show it on exit.
+      if (friendToggleBtn) friendToggleBtn.hidden = isFriend;
       if (screenshotBtnEl) {
         screenshotBtnEl.title = isFriend
           ? `Скріншот → ${helperName ?? 'помічник'}`
           : 'Скріншот → Gemini';
       }
-      showModelToast(isFriend ? `режим: ДРУГ (${helperName ?? '?'})` : 'режим: Gemini');
+      if (isFriend) friendToast.show(helperName);
+      else friendToast.hide();
     },
     showHint: (text) => showModelToast(text),
   });
   if (friendToggleBtn) {
-    friendToggleBtn.addEventListener('click', () => friends.toggleMode());
+    friendToggleBtn.addEventListener('click', () => friends.enableMode());
   }
 
   // S-кнопка / Alt+G / wheel-up: Gemini в normal-режимі, screenshot до друга в friend-режимі.
@@ -159,7 +181,7 @@ async function enterAuthed(me, { fromLogin }) {
     toggleResult: gemini.toggleResult,
     toggleBar,
     cycleModel,
-    toggleFriendMode: friends.toggleMode,
+    toggleFriendMode: friends.enableMode,
     cycleVariant: cycleVariantHotkey,
   });
 
