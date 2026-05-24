@@ -1,23 +1,36 @@
 @media (max-width: 640px) {
   .bar {
-    flex-wrap: wrap;
-    gap: .4rem;
-    padding: .5rem 60px .5rem .75rem;
-    font-size: .8rem;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: clamp(220px, 70vw, 320px);
+    flex-direction: column;
+    align-items: stretch;
+    gap: .5rem;
+    padding: 60px 1rem 1rem;
+    font-size: .9rem;
+    transform: translateX(100%);
+    box-shadow: -4px 0 16px rgba(0, 0, 0, .35);
+
+    &.show {
+      transform: translateX(0);
+    }
 
     .user {
-      flex-basis: 100%;
-      min-width: 0;
       margin-right: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      padding: 0 .25rem .5rem;
+      border-bottom: 1px solid #3a3a40;
     }
 
     a,
     button {
-      padding: .25rem .5rem;
-      font-size: .8rem;
+      padding: .55rem .75rem;
+      font-size: .9rem;
+      text-align: left;
     }
   }
 
