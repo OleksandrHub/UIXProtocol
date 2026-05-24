@@ -18,14 +18,14 @@ export async function handleQuestions(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/me/questions' && method === 'GET') {
+  if (path === '/me/questions' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
     sendJson(res, 200, listQuestions(me.id));
     return true;
   }
 
-  if (path === '/api/me/questions' && method === 'POST') {
+  if (path === '/me/questions' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{
@@ -49,7 +49,7 @@ export async function handleQuestions(
     return true;
   }
 
-  if (path === '/api/me/share-targets' && method === 'GET') {
+  if (path === '/me/share-targets' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const others = listUsers()
@@ -59,7 +59,7 @@ export async function handleQuestions(
     return true;
   }
 
-  if (path === '/api/me/questions/share' && method === 'POST') {
+  if (path === '/me/questions/share' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ toUser?: string; ids?: number[] }>(req);
@@ -83,7 +83,7 @@ export async function handleQuestions(
     return true;
   }
 
-  const imageMatch = path.match(/^\/api\/me\/questions\/(\d+)\/image$/);
+  const imageMatch = path.match(/^\/me\/questions\/(\d+)\/image$/);
   if (imageMatch && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
@@ -99,7 +99,7 @@ export async function handleQuestions(
     return true;
   }
 
-  const idMatch = path.match(/^\/api\/me\/questions\/(\d+)$/);
+  const idMatch = path.match(/^\/me\/questions\/(\d+)$/);
   if (idMatch && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;

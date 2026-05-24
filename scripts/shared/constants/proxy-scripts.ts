@@ -1,3 +1,4 @@
+import { API_PREFIX } from './api';
 
 export const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
@@ -40,12 +41,12 @@ fetch('https://api.ipify.org?format=json').then(function(r){return r.json();}).t
 }).catch(function(e){console.warn(TAG+' браузер-тест впав:',S,e.message);});
 
 // 2) IP центрального сервера (прямий вихід, повз ноут-relay)
-fetch('/api/_diag/server-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+fetch('${API_PREFIX}/_diag/server-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
   console.log(TAG+' центральний сервер → зовні (прямий):',S,d.ip);
 }).catch(function(e){console.warn(TAG+' server-ip впав:',S,e.message);});
 
 // 2b) IP через ноут-relay'ї — це IP'и які бачить target для проксованого контенту
-fetch('/api/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+fetch('${API_PREFIX}/_diag/relay-ip',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
   if(d && Array.isArray(d.relays) && d.relays.length){
     d.relays.forEach(function(r){
       if(r.ip) console.log(TAG+' relay '+r.url+' → '+r.ip,S);

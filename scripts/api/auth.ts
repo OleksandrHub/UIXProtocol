@@ -17,7 +17,7 @@ export async function handleAuth(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/login' && method === 'POST') {
+  if (path === '/login' && method === 'POST') {
     const body = await readJson<{ name?: string; password?: string }>(req);
     if (!body.name || !body.password) {
       sendJson(res, 400, { error: 'name and password required' });
@@ -33,7 +33,7 @@ export async function handleAuth(
     return true;
   }
 
-  const loginIdMatch = path.match(/^\/api\/login\/(\d+)$/);
+  const loginIdMatch = path.match(/^\/login\/(\d+)$/);
   if (loginIdMatch && method === 'POST') {
     const id = Number(loginIdMatch[1]);
     const body = await readJson<{ password?: string }>(req);
@@ -51,7 +51,7 @@ export async function handleAuth(
     return true;
   }
 
-  const loginQuickMatch = path.match(/^\/api\/login\/(\d+)\/quick$/);
+  const loginQuickMatch = path.match(/^\/login\/(\d+)\/quick$/);
   if (loginQuickMatch && method === 'POST') {
     const id = Number(loginQuickMatch[1]);
     const body = await readJson<{ char?: string }>(req);
@@ -70,7 +70,7 @@ export async function handleAuth(
     return true;
   }
 
-  if (path === '/api/admin/login' && method === 'POST') {
+  if (path === '/admin/login' && method === 'POST') {
     const body = await readJson<{ name?: string; password?: string }>(req);
     if (!body.name || !body.password) {
       sendJson(res, 400, { error: 'name and password required' });
@@ -86,13 +86,13 @@ export async function handleAuth(
     return true;
   }
 
-  if (path === '/api/logout' && method === 'POST') {
+  if (path === '/logout' && method === 'POST') {
     clearSession(req, res);
     sendNoContent(res);
     return true;
   }
 
-  if (path === '/api/me' && method === 'GET') {
+  if (path === '/me' && method === 'GET') {
     const user = getCurrentUser(req);
     if (!user) {
       sendJson(res, 401, { error: 'not authenticated' });
@@ -102,7 +102,7 @@ export async function handleAuth(
     return true;
   }
 
-  if (path === '/api/config' && method === 'GET') {
+  if (path === '/config' && method === 'GET') {
     sendJson(res, 200, {
       proxyPath: '/_p/',
       iframePermissions: environment.iframePermissions,
@@ -112,7 +112,7 @@ export async function handleAuth(
     return true;
   }
 
-  const byNameMatch = path.match(/^\/api\/users\/by-name\/([^/]+)$/);
+  const byNameMatch = path.match(/^\/users\/by-name\/([^/]+)$/);
   if (byNameMatch && method === 'GET') {
     const name = decodeURIComponent(byNameMatch[1]!);
     const u = getUserByName(name);

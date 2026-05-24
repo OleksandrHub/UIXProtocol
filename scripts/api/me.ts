@@ -12,7 +12,7 @@ export async function handleMe(
   path: string,
   method: string,
 ): Promise<boolean> {
-  if (path === '/api/me/url' && method === 'PUT') {
+  if (path === '/me/url' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ url?: string }>(req);
@@ -24,7 +24,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/api-keys' && method === 'PUT') {
+  if (path === '/me/api-keys' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ apiKeys?: string[] }>(req);
@@ -36,7 +36,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/password' && method === 'PUT') {
+  if (path === '/me/password' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ password?: string }>(req);
@@ -48,7 +48,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/prompts' && method === 'PUT') {
+  if (path === '/me/prompts' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ prompts?: UserPrompt[]; activePromptId?: string }>(req);
@@ -71,7 +71,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/models' && method === 'PUT') {
+  if (path === '/me/models' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ enabledModels?: string[]; activeModel?: string }>(req);
@@ -89,7 +89,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/archive-questions' && method === 'PUT') {
+  if (path === '/me/archive-questions' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ archiveQuestions?: boolean }>(req);
@@ -101,7 +101,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/dev-tools' && method === 'PUT') {
+  if (path === '/me/dev-tools' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ devTools?: boolean }>(req);
@@ -113,7 +113,7 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/active-model' && method === 'PUT') {
+  if (path === '/me/active-model' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<{ activeModel?: string }>(req);
@@ -125,14 +125,14 @@ export async function handleMe(
     return true;
   }
 
-  if (path === '/api/me/appearance' && method === 'GET') {
+  if (path === '/me/appearance' && method === 'GET') {
     const me = requireAuth(req, res);
     if (!me) return true;
     sendJson(res, 200, getAppearance(me.id));
     return true;
   }
 
-  if (path === '/api/me/appearance' && method === 'PUT') {
+  if (path === '/me/appearance' && method === 'PUT') {
     const me = requireAuth(req, res);
     if (!me) return true;
     const body = await readJson<Appearance>(req);

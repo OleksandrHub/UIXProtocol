@@ -1,4 +1,5 @@
 import { captureFrameAsBlobJpeg } from './user-screenshot.js';
+import { API_PREFIX } from './http.js';
 
 export function initGemini() {
   const btn = document.getElementById('screenshotBtn');
@@ -22,7 +23,7 @@ export function initGemini() {
     showResult('...');
     try {
       const blob = await captureFrameAsBlobJpeg(frameEl);
-      const res = await fetch('/api/gemini/solve', {
+      const res = await fetch(`${API_PREFIX}/gemini/solve`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'image/jpeg' },
