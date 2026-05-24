@@ -47,12 +47,12 @@ const NON_VARIANT_DEFAULTS = {
   btnColorOpacity: 25,
   btnBg: '#ffffff',
   btnBgOpacity: 0,
-  // Active-state colors of the friend toggle (Д). The inactive state reuses
-  // the regular btn* styling. These are flat (not per-variant).
-  friendActiveColor: '#ffffff',
-  friendActiveColorOpacity: 100,
-  friendActiveBg: '#2a6df4',
-  friendActiveBgOpacity: 100,
+  // Persistent toast shown in the bottom-right while friend mode is active.
+  // Displays the helper's name. Flat (not per-variant).
+  friendToastColor: '#ffffff',
+  friendToastColorOpacity: 100,
+  friendToastBg: '#2a6df4',
+  friendToastBgOpacity: 90,
   showFilesStatus: false,
   showModelToast: false,
   showFrameActivity: false,
@@ -171,12 +171,12 @@ export function applyAppearance(a) {
   root.setProperty('--screenshot-color', hexToRgba(data.btnColor, data.btnColorOpacity ?? 100));
   root.setProperty('--screenshot-bg', hexToRgba(data.btnBg, data.btnBgOpacity ?? 0));
   root.setProperty(
-    '--friend-active-color',
-    hexToRgba(data.friendActiveColor, data.friendActiveColorOpacity ?? 100),
+    '--friend-toast-color',
+    hexToRgba(data.friendToastColor, data.friendToastColorOpacity ?? 100),
   );
   root.setProperty(
-    '--friend-active-bg',
-    hexToRgba(data.friendActiveBg, data.friendActiveBgOpacity ?? 100),
+    '--friend-toast-bg',
+    hexToRgba(data.friendToastBg, data.friendToastBgOpacity ?? 90),
   );
 }
 

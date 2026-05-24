@@ -6,7 +6,7 @@
     <button type="button" id="variantRename" title="Перейменувати поточний">✎</button>
     <button type="button" id="variantDelete" title="Видалити поточний">×</button>
   </div>
-  <p class="hint">Alt+R — наступний варіант по колу.</p>
+  <p class="hint">Alt+V — наступний варіант по колу.</p>
 
   <h3>Відповідь Gemini</h3>
   <div class="grid-2">
@@ -92,41 +92,41 @@
     </label>
   </div>
 
-  <h3>Кнопка Д у режимі друга (активний стан)</h3>
+  <h3>Тост імені друга (у режимі друга)</h3>
   <div class="grid-2">
     <label class="color-row"
       >Колір тексту
       <span class="color-row__inputs">
-        <input type="color" id="apFriendActiveColor" />
+        <input type="color" id="apFriendToastColor" />
         <input
           type="range"
-          id="apFriendActiveColorOpacity"
+          id="apFriendToastColorOpacity"
           min="0"
           max="100"
           step="1"
           title="Прозорість тексту"
         />
-        <output id="apFriendActiveColorOpacityOut" class="opacity-out">100%</output>
+        <output id="apFriendToastColorOpacityOut" class="opacity-out">100%</output>
       </span>
     </label>
     <label class="color-row"
       >Колір фону
       <span class="color-row__inputs">
-        <input type="color" id="apFriendActiveBg" />
+        <input type="color" id="apFriendToastBg" />
         <input
           type="range"
-          id="apFriendActiveBgOpacity"
+          id="apFriendToastBgOpacity"
           min="0"
           max="100"
           step="1"
           title="Прозорість фону"
         />
-        <output id="apFriendActiveBgOpacityOut" class="opacity-out">100%</output>
+        <output id="apFriendToastBgOpacityOut" class="opacity-out">0%</output>
       </span>
     </label>
   </div>
 
-  <p class="hint">Прозорість 0% — повністю прозоро, 100% — без прозорості. Неактивний стан Д використовує ті ж кольори що й S.</p>
+  <p class="hint">Прозорість 0% — повністю прозоро, 100% — без прозорості. У режимі друга у правому нижньому куті постійно показується ім'я помічника.</p>
 
   <h3>Індикатори</h3>
   <label class="check"

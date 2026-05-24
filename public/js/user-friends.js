@@ -3,8 +3,10 @@ import { captureFrameAsBase64Jpeg } from './user-screenshot.js';
 
 // Returns a controller exposing:
 //   getMode():'normal'|'friend'
-//   toggleMode()
-//   triggerScreenshot()         — used by Alt+S / wheel-up in friend mode
+//   getActiveHelperName(): string|null
+//   enableMode()                — used by Alt+F + Д button (no-op if already on)
+//   disableMode()               — invoked from Settings, never from hotkey
+//   triggerScreenshot()         — used by Alt+G / wheel-up in friend mode
 //   refreshFriendsPanel(root)   — re-renders the Друзі panel content
 //   destroy()
 export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
@@ -137,15 +139,24 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     );
     if (outgoingBlock) root.appendChild(outgoingBlock);
 
-    // Active: I am the asker → my helper
-    const askerBlock = section('Мій помічник', lists.asAsker, (c) =>
-      itemRow(c.helperName, [
+    // Active: I am the asker → my helper. While friend mode is active, the
+    // user can only exit it from here (per design — neither Alt+F nor the
+    // floating Д button toggles it off).
+    const askerBlock = section('Мій помічник', lists.asAsker, (c) => {
+      const actions = [];
+      if (mode === 'friend' && lists.asAsker[0]?.id === c.id) {
+        actions.push(
+          button('Вийти з режиму друга', 'is-primary', () => disableMode()),
+        );
+      }
+      actions.push(
         button('Відключити', '', async () => {
           await api(`/me/friends/${c.id}`, { method: 'DELETE' });
           await refreshLists();
         }),
-      ]),
-    );
+      );
+      return itemRow(c.helperName, actions);
+    });
     if (askerBlock) root.appendChild(askerBlock);
 
     // Active: I am the helper → people I help
@@ -176,10 +187,14 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
 
   const chatModal = document.getElementById('friendChat');
   const chatImg = document.getElementById('friendChatImg');
+  const chatImageWrap = document.getElementById('friendChatImageWrap');
   const chatFrom = document.getElementById('friendChatFrom');
   const chatReply = document.getElementById('friendChatReply');
   const chatSend = document.getElementById('friendChatSend');
   const chatClose = document.getElementById('friendChatClose');
+  const chatCopyBtn = document.getElementById('friendChatCopy');
+  const chatFullscreenBtn = document.getElementById('friendChatFullscreen');
+  const chatFullscreenExitBtn = document.getElementById('friendChatFullscreenExit');
   const chatStatus = document.getElementById('friendChatStatus');
   let currentScreenshot = null; // { askerId, askerName, imageBase64 }
 
@@ -190,15 +205,55 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     chatReply.value = '';
     chatStatus.textContent = '';
     chatModal.hidden = false;
+    exitFullscreenImage();
     setTimeout(() => chatReply.focus(), 50);
   }
 
   function closeChat() {
     chatModal.hidden = true;
     currentScreenshot = null;
+    exitFullscreenImage();
+  }
+
+  function enterFullscreenImage() {
+    if (!chatImageWrap) return;
+    chatImageWrap.classList.add('is-fullscreen');
+    if (chatFullscreenExitBtn) chatFullscreenExitBtn.hidden = false;
+  }
+  function exitFullscreenImage() {
+    if (!chatImageWrap) return;
+    chatImageWrap.classList.remove('is-fullscreen');
+    if (chatFullscreenExitBtn) chatFullscreenExitBtn.hidden = true;
+  }
+
+  async function copyChatImage() {
+    if (!chatImg || !chatImg.complete) return;
+    chatStatus.textContent = 'копіюю…';
+    try {
+      // JPEG → canvas → PNG blob. Clipboard API only reliably accepts PNG
+      // across browsers; jpeg through it works on Chromium but not Firefox.
+      const canvas = document.createElement('canvas');
+      canvas.width = chatImg.naturalWidth;
+      canvas.height = chatImg.naturalHeight;
+      canvas.getContext('2d').drawImage(chatImg, 0, 0);
+      const blob = await new Promise((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png'),
+      );
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      chatStatus.textContent = 'зображення скопійовано ✓';
+      setTimeout(() => {
+        if (chatStatus.textContent.startsWith('зображення скопійовано')) chatStatus.textContent = '';
+      }, 1500);
+    } catch (e) {
+      chatStatus.textContent = `помилка копіювання: ${e.message}`;
+    }
   }
 
   if (chatClose) chatClose.addEventListener('click', closeChat);
+  if (chatCopyBtn) chatCopyBtn.addEventListener('click', copyChatImage);
+  if (chatFullscreenBtn) chatFullscreenBtn.addEventListener('click', enterFullscreenImage);
+  if (chatFullscreenExitBtn) chatFullscreenExitBtn.addEventListener('click', exitFullscreenImage);
+  if (chatImg) chatImg.addEventListener('click', enterFullscreenImage);
   if (chatSend) {
     chatSend.addEventListener('click', async () => {
       if (!currentScreenshot) return;
@@ -227,6 +282,73 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
         chatSend?.click();
       }
       if (e.key === 'Escape') closeChat();
+    });
+  }
+
+  // Global Esc handler: only exits fullscreen if it's the foreground concern.
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (chatImageWrap?.classList.contains('is-fullscreen')) {
+      e.preventDefault();
+      exitFullscreenImage();
+    }
+  });
+
+  // ---- Incoming request confirmation modal -----------------------------
+
+  const requestModal = document.getElementById('friendRequest');
+  const requestFromEl = document.getElementById('friendRequestFromName');
+  const requestStatusEl = document.getElementById('friendRequestStatus');
+  const requestAcceptBtn = document.getElementById('friendRequestAccept');
+  const requestDeclineBtn = document.getElementById('friendRequestDecline');
+  let pendingRequest = null; // { id, askerName }
+
+  function openRequestModal(connection) {
+    if (!requestModal) return;
+    pendingRequest = connection;
+    if (requestFromEl) requestFromEl.textContent = connection.askerName ?? '?';
+    if (requestStatusEl) requestStatusEl.textContent = '';
+    if (requestAcceptBtn) requestAcceptBtn.disabled = false;
+    if (requestDeclineBtn) requestDeclineBtn.disabled = false;
+    requestModal.hidden = false;
+  }
+  function closeRequestModal() {
+    if (requestModal) requestModal.hidden = true;
+    pendingRequest = null;
+  }
+  if (requestAcceptBtn) {
+    requestAcceptBtn.addEventListener('click', async () => {
+      if (!pendingRequest) return;
+      requestAcceptBtn.disabled = true;
+      if (requestDeclineBtn) requestDeclineBtn.disabled = true;
+      if (requestStatusEl) requestStatusEl.textContent = 'приймаю…';
+      try {
+        await api('/me/friends/accept', {
+          method: 'POST',
+          body: JSON.stringify({ id: pendingRequest.id }),
+        });
+        closeRequestModal();
+        await refreshLists();
+      } catch (e) {
+        if (requestStatusEl) requestStatusEl.textContent = `помилка: ${e.message}`;
+        requestAcceptBtn.disabled = false;
+        if (requestDeclineBtn) requestDeclineBtn.disabled = false;
+      }
+    });
+  }
+  if (requestDeclineBtn) {
+    requestDeclineBtn.addEventListener('click', async () => {
+      if (!pendingRequest) return;
+      requestDeclineBtn.disabled = true;
+      if (requestAcceptBtn) requestAcceptBtn.disabled = true;
+      try {
+        await api(`/me/friends/${pendingRequest.id}`, { method: 'DELETE' });
+        closeRequestModal();
+        await refreshLists();
+      } catch {
+        // Even if server delete fails, hide the modal — user clearly wants out.
+        closeRequestModal();
+      }
     });
   }
 
@@ -288,10 +410,13 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   function handleEvent(msg) {
     switch (msg.type) {
       case 'request':
+        refreshLists();
+        if (msg.connection) openRequestModal(msg.connection);
+        else showHint?.('новий запит на допомогу');
+        break;
       case 'accepted':
       case 'disconnected':
         refreshLists();
-        if (msg.type === 'request') showHint?.(`запит на допомогу від ${msg.connection?.askerName ?? '?'}`);
         if (msg.type === 'accepted') showHint?.(`помічник підключився: ${msg.connection?.helperName ?? '?'}`);
         break;
       case 'screenshot':
@@ -313,21 +438,31 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   connectStream();
   refreshLists();
 
+  function enableMode() {
+    if (mode === 'friend') return;
+    if (lists.asAsker.length === 0) {
+      showHint?.('немає активного помічника');
+      return;
+    }
+    mode = 'friend';
+    const helperName = lists.asAsker[0]?.helperName ?? null;
+    onModeChange?.(mode, helperName);
+    if (panelRoot) renderPanel(panelRoot);
+  }
+
+  function disableMode() {
+    if (mode === 'normal') return;
+    mode = 'normal';
+    const helperName = lists.asAsker[0]?.helperName ?? null;
+    onModeChange?.(mode, helperName);
+    if (panelRoot) renderPanel(panelRoot);
+  }
+
   return {
     getMode: () => mode,
-    toggleMode: () => {
-      if (mode === 'normal') {
-        if (lists.asAsker.length === 0) {
-          showHint?.('немає активного помічника');
-          return;
-        }
-        mode = 'friend';
-      } else {
-        mode = 'normal';
-      }
-      const helperName = lists.asAsker[0]?.helperName ?? null;
-      onModeChange?.(mode, helperName);
-    },
+    getActiveHelperName: () => lists.asAsker[0]?.helperName ?? null,
+    enableMode,
+    disableMode,
     triggerScreenshot,
     refreshFriendsPanel: renderPanel,
     destroy() {

@@ -124,7 +124,7 @@
   font-style: italic;
 }
 
-// ===== Variants bar (Alt+R) =====
+// ===== Variants bar (Alt+V) =====
 
 .variants-bar {
   display: flex;
@@ -160,15 +160,63 @@
   }
 }
 
-// ===== Friend toggle button (Д) =====
-// Uses the same --screenshot-* CSS vars as the S button via the
-// shared `.gemini-panel button` selector — appearance settings affect both.
-// When friend mode is active we override background / color to make the
-// active state obvious without relying on toasts.
+// ===== Friend toggle button (Д) — floating, mobile-only =====
+// Sits in the bottom-right corner on touch devices as the only way to enter
+// friend mode there (desktop uses Alt+F). Hidden on hover-capable pointers
+// because the keyboard shortcut covers that case. Also hidden via `hidden`
+// attribute by JS while friend mode is active (per spec 3.2 / 3.3 — exit is
+// only via Settings).
 
-#friendToggleBtn.is-active {
-  background: var(--friend-active-bg, #2a6df4) !important;
-  color: var(--friend-active-color, #fff) !important;
+.friend-toggle-floating {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: var(--screenshot-bg, #fff);
+  color: var(--screenshot-color, #1a1a1a);
+  font-family: var(--screenshot-font, inherit);
+  font-size: calc(var(--screenshot-size, 14px) + 4px);
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  z-index: 95;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+// Hide on devices that have a precise pointer (mouse): friend mode is
+// entered via Alt+F there. Coarse-pointer (touch) keeps the button.
+@media (pointer: fine) {
+  .friend-toggle-floating {
+    display: none;
+  }
+}
+
+// ===== Friend name toast (persistent in friend mode) =====
+.friend-toast {
+  position: fixed;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--friend-toast-bg, rgba(42, 109, 244, 0.9));
+  color: var(--friend-toast-color, #fff);
+  font-family: var(--result-font, inherit);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 4px;
+  z-index: 96;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+  &[hidden] {
+    display: none;
+  }
 }
 
 // ===== Friend chat modal =====
@@ -202,18 +250,95 @@
 }
 
 .friend-chat__image-wrap {
+  position: relative;
   max-height: 60vh;
   overflow: auto;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 6px;
   margin-bottom: 12px;
   background: #fff;
+
+  // Fullscreen mode: image fills the whole viewport over a dim backdrop.
+  &.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    max-height: none;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.92);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .friend-chat__image {
+      width: auto;
+      max-width: 100vw;
+      max-height: 100vh;
+      object-fit: contain;
+      cursor: zoom-out;
+    }
+  }
 }
 
 .friend-chat__image {
   display: block;
   width: 100%;
   height: auto;
+  cursor: zoom-in;
+}
+
+.friend-chat__icon-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: 15px;
+  line-height: 1.2;
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.05);
+  }
+}
+
+.friend-chat__fullscreen-exit {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 201;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+// ===== Friend request confirmation modal =====
+.friend-request__body {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+
+  #friendRequestFromName {
+    font-weight: 600;
+  }
+}
+
+.friend-request__status {
+  min-height: 1em;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-bottom: 8px;
 }
 
 .friend-chat__reply {
