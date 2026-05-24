@@ -177,8 +177,8 @@
   color: var(--screenshot-color, #1a1a1a);
   font-family: var(--screenshot-font, inherit);
   font-size: calc(var(--screenshot-size, 14px) + 4px);
+  border: none;
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   cursor: pointer;
   z-index: 95;
 

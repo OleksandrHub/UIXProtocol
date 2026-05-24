@@ -1,4 +1,5 @@
 import { API_PREFIX } from './api';
+import { PROXY_PREFIX } from './proxy';
 
 export const PERMISSIVE_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.1, maximum-scale=5">';
@@ -27,6 +28,38 @@ def(Document.prototype,'msVisibilityState','visible');
 var swallow=function(e){try{e.stopImmediatePropagation();}catch(_){}};
 D.addEventListener('freeze',swallow,true);
 W.addEventListener('freeze',swallow,true);
+}catch(e){}})();</script>`;
+
+// Routes cross-origin fetch / XHR through our same-origin proxy so the iframe
+// can talk to third-party CDNs (gstatic.com for Google Forms, etc.) without
+// running into CORS. Same-origin requests pass through untouched.
+export const CROSS_ORIGIN_PROXY_SCRIPT = `<script data-uix-xoproxy>(function(){try{
+var origin=location.origin;
+var prefix='${PROXY_PREFIX}/';
+function shouldRewrite(u){
+  if(typeof u!=='string')return false;
+  var s=u.toLowerCase();
+  if(!s.indexOf('${PROXY_PREFIX}/'))return false;
+  if(s.slice(0,7)!=='http://'&&s.slice(0,8)!=='https://')return false;
+  try{return new URL(u).origin!==origin;}catch(e){return false;}
+}
+function rewrite(u){return shouldRewrite(u)?prefix+u:u;}
+if(typeof window.fetch==='function'){
+  var origFetch=window.fetch;
+  window.fetch=function(input,init){
+    try{
+      if(typeof input==='string')input=rewrite(input);
+      else if(input&&typeof input.url==='string'&&shouldRewrite(input.url))
+        input=new Request(rewrite(input.url),input);
+    }catch(e){}
+    return origFetch.call(this,input,init);
+  };
+}
+var origOpen=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(method,url){
+  try{if(shouldRewrite(url))arguments[1]=prefix+url;}catch(e){}
+  return origOpen.apply(this,arguments);
+};
 }catch(e){}})();</script>`;
 
 export const IP_DIAG_SCRIPT = `<script data-uix-ipdiag>(function(){
