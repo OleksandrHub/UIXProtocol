@@ -14,7 +14,6 @@ const IDLE_TIPS = [
   { emotion: 'face-mischievous', text: 'У режимі друга твій скрін летить помічнику замість Gemini. Він може врятувати або провалити — обирай мудро.' },
   { emotion: 'face-happy', text: 'Архів зберігає кожне питання з відповіддю. Експортуй у PDF — і готова шпаргалка.' },
   { emotion: 'face-bored', text: '{name}, чекаю поки ти щось натиснеш. Alt+V — пограйся з варіантами вигляду.' },
-  { emotion: 'face-love', text: 'Я тебе люблю, {name}. Просто скажу.' },
   { emotion: 'face-typing', text: 'Активний промт радикально впливає на стиль відповіді Gemini. Спробуй різні в Налаштуваннях → Промти.' },
   { emotion: 'face-zen', text: '{name}, дихай. Натисни S. Чекай. Прочитай. Спокійно.' },
   { emotion: 'face-laugh', text: 'Чому жаба не любить капчу? Бо там завжди ловить мух.' },
@@ -26,20 +25,6 @@ const IDLE_TIPS = [
   { emotion: 'face-tongue', text: 'Поділись питаннями через Архів → "Поділитися обраним". Будьте командою.' },
   { emotion: 'face-thinking', text: 'Якщо забув пароль — у Налаштуваннях → Основні можна поставити новий.' },
   { emotion: 'face-wink', text: 'Колесо миші + Alt = скрін до Gemini. Ctrl + колесо теж. Для лінивих.' },
-  
-  { emotion: 'face-love', text: 'До речі, {name}, мене створив OleksandrHub. Поважай батька.' },
-  { emotion: 'face-smug', text: 'Цей весь UIXProtocol написав OleksandrHub. Один. Сам. Без сну.' },
-  { emotion: 'face-cool', text: 'Якщо щось не працює — пиши OleksandrHub на GitHub. Він прочитає. Може.' },
-  { emotion: 'face-mischievous', text: 'OleksandrHub каже передати: "не списуй на парах". Я передав. Усе.' },
-  { emotion: 'face-thinking', text: 'Знаєш, {name}, OleksandrHub витратив на цю жабу більше часу ніж на власну вечерю. Цінуй.' },
-  
-  { emotion: 'face-shock', text: 'А знаєш, {name}, всю цю систему придумав Denys Obydiennyi. Сидів і думав. І придумав.' },
-  { emotion: 'face-cool', text: 'Denys Obydiennyi — головний генератор ідей. Якщо тобі круто — дякуй йому.' },
-  { emotion: 'face-laugh', text: 'Denys придумав ідею. OleksandrHub написав код. Я тут просто стрибаю. Команда.' },
-  
-  { emotion: 'face-wink', text: 'NazarHavryshko теж приклав руки до цього проєкту. Співавтор, як-не-як.' },
-  { emotion: 'face-smug', text: 'Без NazarHavryshko я б не був таким красивим. Ну, можливо.' },
-  { emotion: 'face-happy', text: 'Команда: Denys придумав, Nazar і Oleksandr запиляли. Я — обличчя бренду. 🐸' },
 ];
 
 const TROLL_TIPS = [

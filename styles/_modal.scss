@@ -254,7 +254,7 @@
     visibility: hidden;
   }
 
-  input[type="radio"]:checked ~ .active-label {
+  input[type="radio"]:checked~.active-label {
     visibility: visible;
   }
 }
