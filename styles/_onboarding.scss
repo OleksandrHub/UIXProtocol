@@ -1,5 +1,5 @@
 .onboarding {
-  
+
   position: fixed;
   z-index: 110;
   display: flex;
@@ -20,6 +20,7 @@
     transform: translate(-50%, -50%);
     align-items: center;
   }
+
   &.is-tl {
     top: 4rem;
     left: 1rem;
@@ -27,6 +28,7 @@
     bottom: auto;
     align-items: flex-start;
   }
+
   &.is-tr {
     top: 4rem;
     right: 1rem;
@@ -35,6 +37,7 @@
     align-items: flex-start;
     flex-direction: row-reverse;
   }
+
   &.is-bl {
     bottom: 1rem;
     left: 1rem;
@@ -42,6 +45,7 @@
     right: auto;
     align-items: flex-end;
   }
+
   &.is-br {
     bottom: 1rem;
     right: 1rem;
@@ -187,13 +191,27 @@
 }
 
 @keyframes onboarding-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 @keyframes onboarding-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }
 
 .onboarding-target {
@@ -206,10 +224,13 @@
 }
 
 @keyframes onboarding-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     outline-color: rgba(249, 211, 66, 0.95);
     box-shadow: 0 0 0 8px rgba(249, 211, 66, 0.18);
   }
+
   50% {
     outline-color: rgba(249, 211, 66, 0.4);
     box-shadow: 0 0 0 14px rgba(249, 211, 66, 0.06);
@@ -219,7 +240,7 @@
 @media (max-width: 640px) {
   .onboarding {
     left: 0.5rem;
-    
+
     bottom: 5rem;
 
     &__avatar {

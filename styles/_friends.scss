@@ -53,7 +53,7 @@
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.02);
 
-  > span {
+  >span {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -99,7 +99,7 @@
     line-height: 1.5;
   }
 
-  li + li {
+  li+li {
     margin-top: 4px;
   }
 

@@ -26,11 +26,10 @@ const [me, cfg] = await Promise.all([
   api('/config'),
 ]);
 
-if (me && me.id === id) {
+if (me && me.id === id) 
   await enterAuthed(me, { fromLogin: false });
-} else {
+else
   await initLogin();
-}
 
 function shortModel(m) {
   if (!m) return '';
