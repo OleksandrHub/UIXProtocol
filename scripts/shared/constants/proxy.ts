@@ -21,6 +21,7 @@ export const TURNSTILE_SCRIPT_TAG_RE =
 
 export const HEALTH_CHECK_INTERVAL_MS = 10_000;
 export const HEALTH_CHECK_TIMEOUT_MS = 3_000;
-export const RECHECK_AFTER_FAIL_MS = 5_000;
+export const RECHECK_AFTER_FAIL_MS = 1_000;
+export const RECHECK_BACKOFF_MAX_MS = 15_000;
 
 export const STREAM_OVERLAP = 256;

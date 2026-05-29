@@ -124,7 +124,14 @@ const httpServer = http.createServer(requestHandler);
 httpServer.on('upgrade', handleUpgrade);
 
 void (async () => {
-  await initRelayPool();
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+
+await initRelayPool();
   httpServer.listen(environment.port, '0.0.0.0', () => {
     console.log(`✅  HTTP  listening on 0.0.0.0:${environment.port}`);
     console.log(`    Local:    http://localhost:${environment.port}`);

@@ -1,4 +1,5 @@
-import * as net from 'node:net';
+import * as http from 'node:http';
+import * as https from 'node:https';
 import { URL } from 'node:url';
 
 import { environment } from '../../environments/environment';
@@ -6,8 +7,11 @@ import {
   HEALTH_CHECK_INTERVAL_MS,
   HEALTH_CHECK_TIMEOUT_MS,
   RECHECK_AFTER_FAIL_MS,
+  RECHECK_BACKOFF_MAX_MS,
 } from '../shared/constants';
 import type { PublicRelayStatus, RelayStatus } from '../shared/types';
+
+const RELAY_PROBE_URL = 'https://api.ipify.org?format=text';
 
 const status: RelayStatus[] = [];
 let initPromise: Promise<void> | null = null;
@@ -22,13 +26,12 @@ function parseUrl(raw: string): URL | null {
 
 function probeOne(s: RelayStatus): Promise<void> {
   return new Promise((resolve) => {
+    const lib = s.url.protocol === 'https:' ? https : http;
     const port = Number(s.url.port) || (s.url.protocol === 'https:' ? 443 : 80);
-    const socket = net.createConnection({ host: s.url.hostname, port });
     let done = false;
     const finish = (healthy: boolean, error: string | null): void => {
       if (done) return;
       done = true;
-      socket.destroy();
       const wasHealthy = s.healthy;
       s.healthy = healthy;
       s.lastCheckedAt = Date.now();
@@ -40,10 +43,29 @@ function probeOne(s: RelayStatus): Promise<void> {
       }
       resolve();
     };
-    socket.setTimeout(HEALTH_CHECK_TIMEOUT_MS);
-    socket.on('connect', () => finish(true, null));
-    socket.on('timeout', () => finish(false, 'timeout'));
-    socket.on('error', (err) => finish(false, err.message));
+
+    const req = lib.request(
+      {
+        hostname: s.url.hostname,
+        port,
+        path: '/',
+        method: 'GET',
+        headers: { 'x-relay-url': RELAY_PROBE_URL },
+        timeout: HEALTH_CHECK_TIMEOUT_MS,
+      },
+      (res) => {
+        const code = res.statusCode ?? 0;
+        const healthy = code >= 200 && code < 400;
+        res.resume(); // drain so the socket can close
+        finish(healthy, healthy ? null : `probe status ${code}`);
+      },
+    );
+    req.on('timeout', () => {
+      req.destroy();
+      finish(false, 'timeout');
+    });
+    req.on('error', (err: Error) => finish(false, err.message));
+    req.end();
   });
 }
 
@@ -89,6 +111,25 @@ export function pickRelay(userId: number | null): URL | null {
   return null;
 }
 
+const recovering = new Set<RelayStatus>();
+
+function scheduleRecovery(s: RelayStatus): void {
+  if (recovering.has(s)) return;
+  recovering.add(s);
+  const attempt = (delay: number): void => {
+    setTimeout(() => {
+      void probeOne(s).then(() => {
+        if (s.healthy) {
+          recovering.delete(s);
+        } else {
+          attempt(Math.min(delay * 2, RECHECK_BACKOFF_MAX_MS));
+        }
+      });
+    }, delay).unref();
+  };
+  attempt(RECHECK_AFTER_FAIL_MS);
+}
+
 export function reportRelayFailure(target: URL, error: string): void {
   if (!initPromise) void initRelayPool();
   for (const s of status) {
@@ -99,9 +140,7 @@ export function reportRelayFailure(target: URL, error: string): void {
     s.healthy = false;
     s.lastError = error;
     s.lastCheckedAt = Date.now();
-    setTimeout(() => {
-      void probeOne(s);
-    }, RECHECK_AFTER_FAIL_MS).unref();
+    scheduleRecovery(s);
     return;
   }
 }
