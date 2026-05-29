@@ -178,6 +178,12 @@ function performProxy(
   incomingHeaders['x-forwarded-host'] = targetHost;
 
   const fwdProxy = pickForwardProxy(userId);
+  if (!fwdProxy && environment.forwardProxies.length > 0) {
+    console.warn('[Proxy] no healthy relay — refusing to fall back to direct');
+    if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end('no healthy relay available');
+    return;
+  }
   let outboundHostname: string;
   let outboundPort: number;
   let outboundPath: string;
