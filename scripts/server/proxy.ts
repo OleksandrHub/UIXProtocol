@@ -179,10 +179,13 @@ function performProxy(
 
   const fwdProxy = pickForwardProxy(userId);
   if (!fwdProxy && environment.forwardProxies.length > 0) {
-    console.warn('[Proxy] no healthy relay — refusing to fall back to direct');
-    if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('no healthy relay available');
-    return;
+    if (!environment.directFallback) {
+      console.warn('[Proxy] no healthy relay — refusing to fall back to direct');
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+      res.end('no healthy relay available');
+      return;
+    }
+    console.warn('[Proxy] no healthy relay — falling back to direct (directFallback=true)');
   }
   let outboundHostname: string;
   let outboundPort: number;

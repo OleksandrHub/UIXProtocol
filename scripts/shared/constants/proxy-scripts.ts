@@ -50,6 +50,38 @@ var swallowLeave=function(e){try{if(e.relatedTarget==null)e.stopImmediatePropaga
   D.addEventListener(t,swallowLeave,true);
   W.addEventListener(t,swallowLeave,true);
 });
+
+// navigator.userActivation — Chrome/Firefox API that gates things like
+// autoplay and clipboard behind "was there a recent user gesture?".
+// Some proctoring systems read isActive/hasBeenActive to decide if the
+// student is at the keyboard. Spoof both to true.
+try{
+  if(navigator.userActivation){
+    def(navigator.userActivation,'isActive',true);
+    def(navigator.userActivation,'hasBeenActive',true);
+  }
+}catch(e){}
+
+// Fire a synthetic focus event so any listener the site attached before
+// our script ran still receives the "frame got focus" signal.
+try{
+  W.dispatchEvent(new FocusEvent('focus',{bubbles:false,cancelable:false,view:W}));
+}catch(e){}
+
+// Periodic synthetic pointer activity — keeps roll-your-own idle timers
+// from expiring on sites that track the timestamp of the last input event.
+// Small random deltas (±3 px every 8 s) look like micro hand-jitter;
+// both mousemove and pointermove are dispatched for broad compatibility.
+try{
+  var _ax=300,_ay=300;
+  setInterval(function(){
+    var dx=(Math.random()*6-3)|0, dy=(Math.random()*6-3)|0;
+    _ax=_ax+dx; _ay=_ay+dy;
+    var opts={bubbles:true,cancelable:true,view:W,clientX:_ax,clientY:_ay};
+    try{D.dispatchEvent(new MouseEvent('mousemove',opts));}catch(_){}
+    try{D.dispatchEvent(new PointerEvent('pointermove',Object.assign({},opts,{pointerId:1,pointerType:'mouse',movementX:dx,movementY:dy})));}catch(_){}
+  },8000);
+}catch(e){}
 }catch(e){}})();</script>`;
 
 export const CROSS_ORIGIN_PROXY_SCRIPT = `<script data-uix-xoproxy>(function(){try{

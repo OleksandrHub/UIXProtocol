@@ -7,6 +7,7 @@ export const environment = {
     'http://localhost:8788',
     'http://localhost:8789',
   ] as string[],
+  directFallback: true,
   sessionTtlMs: 60 * 60 * 1000,
   iframePermissions: [
     'camera',
