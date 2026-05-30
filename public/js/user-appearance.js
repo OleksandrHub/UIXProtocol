@@ -29,6 +29,8 @@ const NON_VARIANT_DEFAULTS = {
   friendToastColorOpacity: 100,
   friendToastBg: '#2a6df4',
   friendToastBgOpacity: 90,
+  friendAutoAccept: [],
+  friendQuickReplies: [],
   showFilesStatus: false,
   showModelToast: false,
   showFrameActivity: false,

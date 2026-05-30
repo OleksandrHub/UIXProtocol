@@ -1,4 +1,5 @@
 import { api, API_PREFIX } from './http.js';
+import { loadAppearance, saveAppearance } from './user-appearance.js';
 import { captureFrameAsBase64Jpeg } from './user-screenshot.js';
 
 export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
@@ -6,6 +7,23 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   let mode = 'normal';
   let lists = { asAsker: [], asHelper: [], pendingIncoming: [], pendingOutgoing: [] };
   let busy = false;
+  const SEARCH_DEBOUNCE_MS = 250;
+  let searchQuery = '';
+  let searchResults = [];
+  let searchBusy = false;
+  let searchError = '';
+  let searchTimer = null;
+  let searchLoaded = false;
+  let searchListEl = null;
+  let searchInputEl = null;
+  let searchStatusEl = null;
+  let searchErrorEl = null;
+  let pollTimer = null;
+  let friendAutoAccept = [];
+  let friendQuickReplies = [];
+  let prefsAutoInputEl = null;
+  let prefsQuickInputEl = null;
+  let prefsStatusEl = null;
 
   async function refreshLists() {
     try {
@@ -15,6 +33,11 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
       lists = { asAsker: [], asHelper: [], pendingIncoming: [], pendingOutgoing: [] };
     }
     if (panelRoot) renderPanel(panelRoot);
+    renderSearchList();
+    if (!searchLoaded && !searchBusy) loadSearch(searchQuery, { silent: true });
+    if (!pendingRequest && lists.pendingIncoming.length) {
+      openRequestModal(lists.pendingIncoming[0]);
+    }
     if (mode === 'friend' && lists.asAsker.length === 0) {
       mode = 'normal';
       onModeChange?.(mode);
@@ -24,41 +47,259 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
 
   let panelRoot = null;
 
+  const button = (text, cls, onClick) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    if (cls) b.className = cls;
+    b.addEventListener('click', onClick);
+    return b;
+  };
+
+  function normalizeListFromText(text, maxItems) {
+    const raw = String(text ?? '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const out = [];
+    const seen = new Set();
+    for (const item of raw) {
+      const key = item.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+      if (maxItems && out.length >= maxItems) break;
+    }
+    return out;
+  }
+
+  function normalizeListValue(value, maxItems) {
+    if (Array.isArray(value)) return normalizeListFromText(value.join('\n'), maxItems);
+    return normalizeListFromText(value ?? '', maxItems);
+  }
+
+  function listToText(list) {
+    return Array.isArray(list) ? list.join('\n') : '';
+  }
+
+  function loadFriendPrefs() {
+    const ap = loadAppearance();
+    friendAutoAccept = normalizeListValue(ap.friendAutoAccept, 40);
+    friendQuickReplies = normalizeListValue(ap.friendQuickReplies, 16);
+  }
+
+  function formatQuickReply(text) {
+    const name = currentScreenshot?.askerName ?? currentScreenshot?.fromName ?? '';
+    return String(text ?? '').replace(/\{name\}/g, name || '');
+  }
+
+  function renderQuickReplies() {
+    if (!chatQuick) return;
+    chatQuick.innerHTML = '';
+    if (!friendQuickReplies.length) {
+      chatQuick.hidden = true;
+      return;
+    }
+    for (const tpl of friendQuickReplies) {
+      const btn = button(tpl, 'friend-chat__quick-btn', () => {
+        if (!chatReply) return;
+        chatReply.value = formatQuickReply(tpl);
+        chatReply.focus();
+      });
+      btn.title = tpl;
+      chatQuick.appendChild(btn);
+    }
+    chatQuick.hidden = false;
+  }
+
+  loadFriendPrefs();
+
+  function getRelationLabel(userId) {
+    if (lists.asAsker.some((c) => c.helperId === userId)) return 'ваш помічник';
+    if (lists.asHelper.some((c) => c.askerId === userId)) return 'ви допомагаєте';
+    if (lists.pendingOutgoing.some((c) => c.helperId === userId)) return 'очікує';
+    if (lists.pendingIncoming.some((c) => c.askerId === userId)) return 'вхідний запит';
+    return '';
+  }
+
+  function renderSearchStatus() {
+    if (!searchStatusEl) return;
+    if (searchBusy) {
+      searchStatusEl.textContent = 'пошук…';
+      return;
+    }
+    if (searchQuery) searchStatusEl.textContent = `знайдено: ${searchResults.length}`;
+    else searchStatusEl.textContent = searchResults.length ? `показано: ${searchResults.length}` : '';
+  }
+
+  function renderSearchList() {
+    if (!searchListEl) return;
+    searchListEl.innerHTML = '';
+    if (searchErrorEl) searchErrorEl.textContent = searchError || '';
+
+    if (searchBusy) {
+      const li = document.createElement('li');
+      li.className = 'friends-search-empty';
+      li.textContent = 'пошук…';
+      searchListEl.appendChild(li);
+      renderSearchStatus();
+      return;
+    }
+
+    if (!searchResults.length) {
+      const li = document.createElement('li');
+      li.className = 'friends-search-empty';
+      li.textContent = searchQuery ? 'нічого не знайдено' : 'почніть вводити імʼя';
+      searchListEl.appendChild(li);
+      renderSearchStatus();
+      return;
+    }
+
+    for (const u of searchResults) {
+      const li = document.createElement('li');
+      li.className = 'friends-item';
+
+      const nameEl = document.createElement('span');
+      nameEl.textContent = u.name;
+
+      const statusEl = document.createElement('span');
+      const relation = getRelationLabel(u.id);
+      const online = u.isOnline === true;
+      statusEl.className = `friends-status${online ? ' is-online' : ''}`;
+      statusEl.textContent = relation || (online ? 'онлайн' : 'офлайн');
+
+      const inviteBtn = button('Запросити', 'is-primary', async () => {
+        if (inviteBtn.disabled) return;
+        inviteBtn.disabled = true;
+        try {
+          await api('/me/friends/request', {
+            method: 'POST',
+            body: JSON.stringify({ toName: u.name }),
+          });
+          await refreshLists();
+        } catch (e) {
+          if (searchErrorEl) searchErrorEl.textContent = e.message;
+          inviteBtn.disabled = false;
+        }
+      });
+
+      if (relation) inviteBtn.disabled = true;
+
+      li.append(nameEl, statusEl, inviteBtn);
+      searchListEl.appendChild(li);
+    }
+
+    renderSearchStatus();
+  }
+
+  async function loadSearch(query, { silent = false } = {}) {
+    searchBusy = true;
+    searchError = '';
+    if (!silent) renderSearchStatus();
+    try {
+      const res = await api(`/me/friends/users?q=${encodeURIComponent(query)}`);
+      const items = Array.isArray(res) ? res : res?.items;
+      searchResults = Array.isArray(items) ? items : [];
+      searchLoaded = true;
+    } catch (e) {
+      searchError = e.message;
+      searchResults = [];
+    } finally {
+      searchBusy = false;
+      renderSearchList();
+    }
+  }
+
+  function scheduleSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadSearch(searchQuery), SEARCH_DEBOUNCE_MS);
+  }
+
   function renderPanel(root) {
     panelRoot = root;
     root.innerHTML = '';
+    loadFriendPrefs();
 
     const requestBlock = document.createElement('div');
     requestBlock.className = 'friends-block';
     requestBlock.innerHTML = `
       <label>
-        Запросити помічника за ім'ям
-        <div class="friends-input-row">
-          <input id="friendNameInput" type="text" placeholder="ім'я користувача" />
-          <button type="button" id="friendRequestBtn">Запросити</button>
+        Пошук користувача
+        <div class="friends-search-row">
+          <input id="friendSearchInput" type="search" placeholder="введіть ім'я" />
         </div>
       </label>
+      <div class="friends-search-meta" id="friendSearchStatus"></div>
+      <ul class="friends-list friends-search-list" id="friendSearchList"></ul>
       <div class="friends-error" id="friendRequestError"></div>
     `;
     root.appendChild(requestBlock);
 
-    const errEl = requestBlock.querySelector('#friendRequestError');
-    const nameInput = requestBlock.querySelector('#friendNameInput');
-    requestBlock.querySelector('#friendRequestBtn').addEventListener('click', async () => {
-      errEl.textContent = '';
-      const toName = nameInput.value.trim();
-      if (!toName) return;
-      try {
-        await api('/me/friends/request', {
-          method: 'POST',
-          body: JSON.stringify({ toName }),
-        });
-        nameInput.value = '';
-        await refreshLists();
-      } catch (e) {
-        errEl.textContent = e.message;
-      }
-    });
+    searchErrorEl = requestBlock.querySelector('#friendRequestError');
+    searchInputEl = requestBlock.querySelector('#friendSearchInput');
+    searchListEl = requestBlock.querySelector('#friendSearchList');
+    searchStatusEl = requestBlock.querySelector('#friendSearchStatus');
+    if (searchInputEl) {
+      searchInputEl.value = searchQuery;
+      searchInputEl.addEventListener('input', () => {
+        searchQuery = searchInputEl.value.trim();
+        scheduleSearch();
+      });
+      searchInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          searchInputEl.value = '';
+          searchQuery = '';
+          scheduleSearch();
+        }
+      });
+    }
+    renderSearchList();
+
+    const prefsBlock = document.createElement('div');
+    prefsBlock.className = 'friends-block';
+    prefsBlock.innerHTML = `
+      <h4>Автоприйняття</h4>
+      <label>
+        Дозволені користувачі (кожне ім'я з нового рядка)
+        <textarea id="friendAutoAcceptInput" rows="3" placeholder="наприклад: Maria"></textarea>
+      </label>
+      <h4>Швидкі відповіді</h4>
+      <label>
+        Шаблони (кожен з нового рядка, доступний {name})
+        <textarea id="friendQuickRepliesInput" rows="4" placeholder="наприклад: {name}, зараз подивлюсь"></textarea>
+      </label>
+      <div class="friends-actions">
+        <button type="button" id="friendPrefsSave" class="is-primary">Зберегти</button>
+        <span class="friends-meta" id="friendPrefsStatus"></span>
+      </div>
+    `;
+    root.appendChild(prefsBlock);
+
+    prefsAutoInputEl = prefsBlock.querySelector('#friendAutoAcceptInput');
+    prefsQuickInputEl = prefsBlock.querySelector('#friendQuickRepliesInput');
+    prefsStatusEl = prefsBlock.querySelector('#friendPrefsStatus');
+    const prefsSaveBtn = prefsBlock.querySelector('#friendPrefsSave');
+    if (prefsAutoInputEl) prefsAutoInputEl.value = listToText(friendAutoAccept);
+    if (prefsQuickInputEl) prefsQuickInputEl.value = listToText(friendQuickReplies);
+    if (prefsSaveBtn) {
+      prefsSaveBtn.addEventListener('click', async () => {
+        const nextAuto = normalizeListFromText(prefsAutoInputEl?.value ?? '', 40);
+        const nextQuick = normalizeListFromText(prefsQuickInputEl?.value ?? '', 16);
+        if (prefsStatusEl) prefsStatusEl.textContent = 'зберігаю…';
+        prefsSaveBtn.disabled = true;
+        try {
+          await saveAppearance({ friendAutoAccept: nextAuto, friendQuickReplies: nextQuick });
+          friendAutoAccept = nextAuto;
+          friendQuickReplies = nextQuick;
+          if (prefsStatusEl) prefsStatusEl.textContent = 'збережено ✓';
+          renderQuickReplies();
+        } catch (e) {
+          if (prefsStatusEl) prefsStatusEl.textContent = `помилка: ${e.message}`;
+        } finally {
+          prefsSaveBtn.disabled = false;
+        }
+      });
+    }
 
     const section = (title, items, renderItem) => {
       if (!items.length) return null;
@@ -84,15 +325,6 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
       return li;
     };
 
-    const button = (text, cls, onClick) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = text;
-      if (cls) b.className = cls;
-      b.addEventListener('click', onClick);
-      return b;
-    };
-
     const incomingBlock = section('Запити на допомогу (вам)', lists.pendingIncoming, (c) =>
       itemRow(c.askerName, [
         button('Прийняти', 'is-primary', async () => {
@@ -103,7 +335,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
             });
             await refreshLists();
           } catch (e) {
-            errEl.textContent = e.message;
+            if (searchErrorEl) searchErrorEl.textContent = e.message;
           }
         }),
         button('Відхилити', '', async () => {
@@ -174,6 +406,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   const chatCopyBtn = document.getElementById('friendChatCopy');
   const chatFullscreenBtn = document.getElementById('friendChatFullscreen');
   const chatFullscreenExitBtn = document.getElementById('friendChatFullscreenExit');
+  const chatQuick = document.getElementById('friendChatQuick');
   const chatStatus = document.getElementById('friendChatStatus');
   let currentScreenshot = null;
 
@@ -183,6 +416,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     chatFrom.textContent = `від: ${payload.fromName}`;
     chatReply.value = '';
     chatStatus.textContent = '';
+    renderQuickReplies();
     chatModal.hidden = false;
     exitFullscreenImage();
     setTimeout(() => chatReply.focus(), 50);
@@ -362,6 +596,17 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
   let evtSrc = null;
   let retryTimer = null;
 
+  function startPoll() {
+    if (pollTimer) return;
+    pollTimer = setInterval(refreshLists, 15_000);
+  }
+
+  function stopPoll() {
+    if (!pollTimer) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
   function connectStream() {
     if (evtSrc) {
       try { evtSrc.close(); } catch {}
@@ -412,6 +657,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
 
   connectStream();
   refreshLists();
+  startPoll();
 
   function enableMode() {
     if (mode === 'friend') return;
@@ -442,6 +688,8 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     refreshFriendsPanel: renderPanel,
     destroy() {
       clearTimeout(retryTimer);
+      clearTimeout(searchTimer);
+      stopPoll();
       if (evtSrc) try { evtSrc.close(); } catch {}
     },
   };
