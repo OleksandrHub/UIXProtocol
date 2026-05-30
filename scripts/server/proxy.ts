@@ -179,10 +179,13 @@ function performProxy(
 
   const fwdProxy = pickForwardProxy(userId);
   if (!fwdProxy && environment.forwardProxies.length > 0) {
-    console.warn('[Proxy] no healthy relay — refusing to fall back to direct');
-    if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('no healthy relay available');
-    return;
+    if (!environment.directFallback) {
+      console.warn('[Proxy] no healthy relay — refusing to fall back to direct');
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+      res.end('no healthy relay available');
+      return;
+    }
+    console.warn('[Proxy] no healthy relay — falling back to direct (directFallback=true)');
   }
   let outboundHostname: string;
   let outboundPort: number;
@@ -291,6 +294,20 @@ function performProxy(
         return;
       }
 
+      const dest = String(req.headers['sec-fetch-dest'] ?? '').toLowerCase();
+      const status = proxyRes.statusCode ?? 502;
+      const isDocumentNav =
+        dest === '' || dest === 'document' || dest === 'iframe' || dest === 'frame';
+      const isRedirect = status >= 300 && status < 400;
+
+      if (!isDocumentNav || isRedirect) {
+        delete headers['content-encoding'];
+        delete headers['content-length'];
+        res.writeHead(status, headers);
+        stream.pipe(res);
+        return;
+      }
+
       const chunks: Buffer[] = [];
       stream.on('data', (c: Buffer) => chunks.push(c));
       stream.on('end', () => {
@@ -299,7 +316,7 @@ function performProxy(
         const body = Buffer.from(text, 'utf-8');
         delete headers['content-encoding'];
         headers['content-length'] = body.length;
-        res.writeHead(proxyRes.statusCode ?? 502, headers);
+        res.writeHead(status, headers);
         res.end(body);
       });
     }

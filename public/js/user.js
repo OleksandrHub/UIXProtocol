@@ -184,9 +184,25 @@ async function enterAuthed(me, { fromLogin }) {
 
   frame.setAttribute('allow', cfg.iframePermissions.map((p) => `${p} *`).join('; '));
   const proxyBase = location.origin + cfg.proxyPath;
-  if (!fromLogin) frame.src = proxyBase;
+  const FRAME_KEY = `uix_frame_${id}`;
+
+  if (!fromLogin) {
+    const saved = sessionStorage.getItem(FRAME_KEY);
+    frame.src = saved || proxyBase;
+  }
+
+  // Persist current iframe URL so the next reload can restore it
+  frame.addEventListener('load', () => {
+    try {
+      const href = frame.contentWindow?.location?.href;
+      if (href && !href.startsWith('about:') && href !== location.origin + '/') {
+        sessionStorage.setItem(FRAME_KEY, href);
+      }
+    } catch {}
+  });
 
   document.getElementById('logoutBtn').addEventListener('click', async () => {
+    sessionStorage.removeItem(FRAME_KEY);
     await api('/logout', { method: 'POST' });
     location.href = '/';
   });
