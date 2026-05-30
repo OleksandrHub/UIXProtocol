@@ -38,10 +38,13 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     if (!pendingRequest && lists.pendingIncoming.length) {
       openRequestModal(lists.pendingIncoming[0]);
     }
-    if (mode === 'friend' && lists.asAsker.length === 0) {
+    const hasHelper = lists.asAsker.length > 0;
+    if (mode === 'friend' && !hasHelper) {
       mode = 'normal';
-      onModeChange?.(mode);
+      onModeChange?.(mode, null, false);
       showHint?.('режим друга вимкнено: немає активного помічника');
+    } else {
+      onModeChange?.(mode, lists.asAsker[0]?.helperName ?? null, hasHelper);
     }
   }
 
@@ -360,7 +363,11 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
       const actions = [];
       if (mode === 'friend' && lists.asAsker[0]?.id === c.id) {
         actions.push(
-          button('Вийти з режиму друга', 'is-primary', () => disableMode()),
+          button('← Gemini', 'is-primary', () => disableMode()),
+        );
+      } else if (mode !== 'friend' && lists.asAsker[0]?.id === c.id) {
+        actions.push(
+          button('Режим друга', 'is-primary', () => enableMode()),
         );
       }
       actions.push(
@@ -650,6 +657,10 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
         break;
       case 'reply':
         showResult(msg.text || '—');
+        if (msg.helperModel) {
+          const shortM = msg.helperModel.replace(/^gemini-/, '') || msg.helperModel;
+          showHint?.(`↩ ${shortM}`);
+        }
         window.dispatchEvent(new CustomEvent('uix:frog', { detail: { reaction: 'friendReply' } }));
         break;
     }
@@ -667,7 +678,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     }
     mode = 'friend';
     const helperName = lists.asAsker[0]?.helperName ?? null;
-    onModeChange?.(mode, helperName);
+    onModeChange?.(mode, helperName, true);
     if (panelRoot) renderPanel(panelRoot);
   }
 
@@ -675,8 +686,14 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     if (mode === 'normal') return;
     mode = 'normal';
     const helperName = lists.asAsker[0]?.helperName ?? null;
-    onModeChange?.(mode, helperName);
+    const hasHelper = lists.asAsker.length > 0;
+    onModeChange?.(mode, helperName, hasHelper);
     if (panelRoot) renderPanel(panelRoot);
+  }
+
+  function toggleMode() {
+    if (mode === 'friend') disableMode();
+    else enableMode();
   }
 
   return {
@@ -684,6 +701,7 @@ export function initFriends({ me, geminiResultEl, onModeChange, showHint }) {
     getActiveHelperName: () => lists.asAsker[0]?.helperName ?? null,
     enableMode,
     disableMode,
+    toggleMode,
     triggerScreenshot,
     refreshFriendsPanel: renderPanel,
     destroy() {
