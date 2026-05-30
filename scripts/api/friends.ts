@@ -273,6 +273,7 @@ export async function handleFriends(
       type: 'reply',
       from: { id: me.id, name: me.name },
       text,
+      helperModel: me.activeModel || null,
     });
     sendNoContent(res);
     return true;

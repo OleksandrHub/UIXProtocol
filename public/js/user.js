@@ -106,28 +106,47 @@ async function enterAuthed(me, { fromLogin }) {
 
   const friendToggleBtn = document.getElementById('friendToggleBtn');
   const screenshotBtnEl = document.getElementById('screenshotBtn');
-  
-  if (friendToggleBtn) friendToggleBtn.hidden = false;
+
+  let prevFriendMode = 'normal';
 
   const friends = initFriends({
     me,
     geminiResultEl: document.getElementById('geminiResult'),
-    onModeChange: (m, helperName) => {
+    onModeChange: (m, helperName, hasHelper) => {
       const isFriend = m === 'friend';
-      
-      if (friendToggleBtn) friendToggleBtn.hidden = isFriend;
+      const wasFriend = prevFriendMode === 'friend';
+      prevFriendMode = m;
+
+      if (friendToggleBtn) {
+        friendToggleBtn.hidden = !hasHelper;
+        if (hasHelper) {
+          if (isFriend) {
+            friendToggleBtn.textContent = 'G';
+            friendToggleBtn.title = 'Переключитись на Gemini (Alt+F)';
+            friendToggleBtn.classList.add('is-active');
+          } else {
+            friendToggleBtn.textContent = 'Д';
+            friendToggleBtn.title = `Увімкнути режим Друга${helperName ? ': ' + helperName : ''} (Alt+F)`;
+            friendToggleBtn.classList.remove('is-active');
+          }
+        }
+      }
       if (screenshotBtnEl) {
         screenshotBtnEl.title = isFriend
           ? `Скріншот → ${helperName ?? 'помічник'}`
           : 'Скріншот → Gemini';
       }
-      if (isFriend) friendToast.show(helperName);
-      else friendToast.hide();
+      if (isFriend) {
+        friendToast.show(helperName);
+      } else {
+        friendToast.hide();
+        if (wasFriend) showModelToast('Gemini');
+      }
     },
     showHint: (text) => showModelToast(text),
   });
   if (friendToggleBtn) {
-    friendToggleBtn.addEventListener('click', () => friends.enableMode());
+    friendToggleBtn.addEventListener('click', () => friends.toggleMode());
   }
 
   const triggerScreenshot = () => {
@@ -176,7 +195,7 @@ async function enterAuthed(me, { fromLogin }) {
     toggleResult: gemini.toggleResult,
     toggleBar,
     cycleModel,
-    toggleFriendMode: friends.enableMode,
+    toggleFriendMode: friends.toggleMode,
     cycleVariant: cycleVariantHotkey,
   });
 
