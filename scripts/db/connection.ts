@@ -12,7 +12,8 @@ db.exec(`
     password_hash TEXT NOT NULL,
     api_keys TEXT NOT NULL DEFAULT '[]',
     is_admin INTEGER NOT NULL DEFAULT 0,
-    target_url TEXT NOT NULL DEFAULT ''
+    target_url TEXT NOT NULL DEFAULT '',
+    last_seen INTEGER NOT NULL DEFAULT 0
   );
 `);
 
@@ -38,6 +39,9 @@ if (!hasCol('archive_questions')) {
 }
 if (!hasCol('dev_tools')) {
   db.exec('ALTER TABLE users ADD COLUMN dev_tools INTEGER NOT NULL DEFAULT 0');
+}
+if (!hasCol('last_seen')) {
+  db.exec('ALTER TABLE users ADD COLUMN last_seen INTEGER NOT NULL DEFAULT 0');
 }
 
 db.exec(`

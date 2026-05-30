@@ -11,6 +11,7 @@ import type {
 } from '../shared/types';
 
 const userCache = new Map<number, { user: User; expiresAt: number }>();
+const LAST_SEEN_UPDATE_MS = 30_000;
 
 function readCache(id: number): User | null {
   const entry = userCache.get(id);
@@ -43,7 +44,25 @@ function rowToUser(row: UserRow): User {
     activeModel: row.active_model ?? '',
     archiveQuestions: row.archive_questions !== 0,
     devTools: row.dev_tools !== 0,
+    lastSeen: row.last_seen ?? 0,
   };
+}
+
+export function touchUserLastSeen(
+  userId: number,
+  now = Date.now(),
+  force = false,
+): boolean {
+  const cached = readCache(userId);
+  const cachedLastSeen = cached?.lastSeen ?? 0;
+  if (!force && now - cachedLastSeen < LAST_SEEN_UPDATE_MS) return false;
+  db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now, userId);
+  const entry = userCache.get(userId);
+  if (entry) {
+    entry.user.lastSeen = now;
+    entry.expiresAt = Date.now() + USER_CACHE_TTL_MS;
+  }
+  return true;
 }
 
 export function createUser(input: CreateUserInput): User {

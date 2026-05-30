@@ -10,6 +10,7 @@ import {
   listMyFriends,
   removeFriendship,
   requestFriendship,
+  touchUserLastSeen,
 } from '../db';
 import { readJson, requireAuth, sendJson, sendNoContent } from '../api/helpers';
 
@@ -252,6 +253,7 @@ export async function handleFriends(
     const cleanup = (): void => {
       clearInterval(keepalive);
       unsubscribe(me.id, res);
+      if (!isUserOnline(me.id)) touchUserLastSeen(me.id, Date.now(), true);
     };
     req.on('close', cleanup);
     req.on('error', cleanup);

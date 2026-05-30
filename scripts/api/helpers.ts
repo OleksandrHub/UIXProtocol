@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { getUserById } from '../db';
+import { getUserById, touchUserLastSeen } from '../db';
 import { getSessionUserId } from '../auth/session';
 import type { User } from '../shared/types';
 
@@ -60,7 +60,11 @@ export function readBinary(req: IncomingMessage, maxBytes = 15_000_000): Promise
 
 export function getCurrentUser(req: IncomingMessage): User | null {
   const uid = getSessionUserId(req);
-  return uid != null ? getUserById(uid) : null;
+  if (uid == null) return null;
+  const user = getUserById(uid);
+  if (!user) return null;
+  touchUserLastSeen(uid);
+  return user;
 }
 
 export function requireAuth(req: IncomingMessage, res: ServerResponse): User | null {

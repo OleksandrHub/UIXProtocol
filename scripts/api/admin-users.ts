@@ -14,6 +14,7 @@ import {
 } from '../db';
 import { clearSessionsForUser } from '../auth/session';
 import { getCurrentUser, readJson, sendJson, sendNoContent } from '../api/helpers';
+import { isUserOnline } from './friends';
 
 function requireAdmin(req: IncomingMessage, res: ServerResponse): boolean {
   const me = getCurrentUser(req);
@@ -39,7 +40,11 @@ export async function handleAdminUsers(
     
     const users = listUsers().map((u) => {
       const ap = getAppearance(u.id) as Record<string, unknown>;
-      return { ...u, trollMode: ap.trollMode === true };
+      return {
+        ...u,
+        trollMode: ap.trollMode === true,
+        isOnline: isUserOnline(u.id),
+      };
     });
     sendJson(res, 200, users);
     return true;

@@ -15,6 +15,17 @@ function btn(label, onClick, variant = '') {
   return b;
 }
 
+function formatLastSeen(ts, isOnline) {
+  if (isOnline) return 'зараз';
+  const value = Number(ts);
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  try {
+    return new Date(value).toLocaleString('uk-UA');
+  } catch {
+    return '—';
+  }
+}
+
 export function setupUsers({ tbody, errEl, fieldId, setEdit }) {
   async function refresh() {
     try {
@@ -52,7 +63,7 @@ export function setupUsers({ tbody, errEl, fieldId, setEdit }) {
     if (!users.length) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 7;
+      td.colSpan = 9;
       td.textContent = 'Немає користувачів';
       tr.appendChild(td);
       tbody.appendChild(tr);
@@ -66,6 +77,8 @@ export function setupUsers({ tbody, errEl, fieldId, setEdit }) {
       const url = el('td', u.targetUrl || '—');
       url.classList.add('truncate');
       const keys = el('td', String(u.apiKeys.length));
+      const online = el('td', u.isOnline ? 'так' : '—');
+      const lastSeen = el('td', formatLastSeen(u.lastSeen, u.isOnline));
       const troll = document.createElement('td');
       const trollOn = u.trollMode === true;
       troll.appendChild(
@@ -78,7 +91,7 @@ export function setupUsers({ tbody, errEl, fieldId, setEdit }) {
       const actions = document.createElement('td');
       actions.appendChild(btn('Редагувати', () => setEdit(u)));
       actions.appendChild(btn('Видалити', () => removeUser(u.id), 'danger'));
-      tr.append(id, name, admin, url, keys, troll, actions);
+      tr.append(id, name, admin, url, keys, online, lastSeen, troll, actions);
       tbody.appendChild(tr);
     }
   }

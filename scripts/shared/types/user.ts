@@ -32,6 +32,7 @@ export interface User {
   activeModel: string;
   archiveQuestions: boolean;
   devTools: boolean;
+  lastSeen: number;
 }
 
 export interface UserPrompt {
@@ -54,4 +55,5 @@ export interface UserRow {
   active_model: string;
   archive_questions: number;
   dev_tools: number;
+  last_seen: number;
 }
