@@ -21,13 +21,35 @@ def(Document.prototype,'webkitVisibilityState','visible');
 def(Document.prototype,'mozVisibilityState','visible');
 def(Document.prototype,'msVisibilityState','visible');
 
-// Page Lifecycle freeze events are intercepted at the document level via
-// capture + stopImmediatePropagation. Avoids touching EventTarget.prototype
-// — that override looked like an automation tell to some forms (Google
-// Forms in particular) and they'd silently disable input handlers.
+// Fake "page has focus" — so the proctor keeps seeing the iframe as focused
+// even while the user is interacting with the surrounding UIX overlay
+// (top-bar, settings, Gemini panel) or another tab/app. Spoof toString to
+// keep the override looking like a native method.
+try{
+  var fakeHasFocus=function hasFocus(){return true;};
+  try{fakeHasFocus.toString=function(){return 'function hasFocus() { [native code] }';};}catch(_){}
+  Document.prototype.hasFocus=fakeHasFocus;
+}catch(e){}
+
+// Lifecycle / focus-loss signals are intercepted at the document+window level
+// via capture + stopImmediatePropagation. Avoids touching EventTarget.prototype
+// — that override looked like an automation tell to some forms (Google Forms
+// in particular) and they'd silently disable input handlers.
 var swallow=function(e){try{e.stopImmediatePropagation();}catch(_){}};
-D.addEventListener('freeze',swallow,true);
-W.addEventListener('freeze',swallow,true);
+// visibility/freeze/pagehide → always swallowed (whole-page state changes).
+['freeze','visibilitychange','pagehide'].forEach(function(t){
+  D.addEventListener(t,swallow,true);
+  W.addEventListener(t,swallow,true);
+});
+// blur/focusout → swallow ONLY when focus leaves the iframe document
+// (relatedTarget==null, incl. window blur and crossing into the parent frame).
+// Field-to-field moves inside the site keep a non-null relatedTarget and pass
+// through untouched, so the site's own input handlers are not broken.
+var swallowLeave=function(e){try{if(e.relatedTarget==null)e.stopImmediatePropagation();}catch(_){}};
+['blur','focusout'].forEach(function(t){
+  D.addEventListener(t,swallowLeave,true);
+  W.addEventListener(t,swallowLeave,true);
+});
 }catch(e){}})();</script>`;
 
 export const CROSS_ORIGIN_PROXY_SCRIPT = `<script data-uix-xoproxy>(function(){try{

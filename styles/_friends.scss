@@ -160,16 +160,21 @@
   position: fixed;
   right: 14px;
   bottom: 14px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  color: var(--screenshot-color, #1a1a1a);
+  padding: .5rem .9rem;
+  border: 0;
+  background: var(--screenshot-bg, transparent);
+  color: var(--screenshot-color, rgba(0, 0, 0, .1));
   font-family: var(--screenshot-font, inherit);
-  font-size: calc(var(--screenshot-size, 14px) + 4px);
-  border: none;
   font-weight: 600;
+  font-size: var(--screenshot-size, .85rem);
+  border-radius: 4px;
   cursor: pointer;
   z-index: 95;
+  transition: color .15s;
+
+  &:hover {
+    filter: brightness(1.2);
+  }
 
   &[hidden] {
     display: none;
