@@ -3,10 +3,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   acceptFriendship,
   addQuestion,
+  getAppearance,
   getActiveHelperFor,
   getConnection,
   getUserById,
   getUserByName,
+  listUsers,
   listMyFriends,
   removeFriendship,
   requestFriendship,
@@ -27,6 +29,18 @@ function gcPendingScreenshots(): void {
 }
 
 const subscribers = new Map<number, ServerResponse[]>();
+
+function normalizeName(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function isAutoAcceptAllowed(helperId: number, askerName: string): boolean {
+  const ap = getAppearance(helperId) as Record<string, unknown>;
+  const raw = Array.isArray(ap.friendAutoAccept) ? ap.friendAutoAccept : [];
+  const normalized = raw.map(normalizeName).filter(Boolean);
+  if (normalized.includes('*')) return true;
+  return normalized.includes(normalizeName(askerName));
+}
 
 function subscribe(userId: number, res: ServerResponse): void {
   let list = subscribers.get(userId);
@@ -87,6 +101,21 @@ export async function handleFriends(
     return true;
   }
 
+  if (path === '/me/friends/users' && method === 'GET') {
+    const me = requireAuth(req, res);
+    if (!me) return true;
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+    const items = listUsers()
+      .filter((u) => u.id !== me.id)
+      .filter((u) => !q || u.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name, 'uk'))
+      .slice(0, 60)
+      .map((u) => ({ id: u.id, name: u.name, isOnline: isUserOnline(u.id) }));
+    sendJson(res, 200, { items });
+    return true;
+  }
+
   if (path === '/me/friends/request' && method === 'POST') {
     const me = requireAuth(req, res);
     if (!me) return true;
@@ -101,14 +130,28 @@ export async function handleFriends(
       sendJson(res, 404, { error: 'user not found' });
       return true;
     }
+    const shouldAutoAccept = isAutoAcceptAllowed(helper.id, me.name);
     const result = requestFriendship(me.id, helper.id);
     if (!result.ok) {
       sendJson(res, 400, { error: result.error });
       return true;
     }
-    
-    broadcast(helper.id, { type: 'request', connection: result.connection });
-    sendJson(res, 201, result.connection);
+    const conn = result.connection;
+    if (shouldAutoAccept && conn.status === 'pending') {
+      const accepted = acceptFriendship(conn.id, helper.id);
+      if (accepted) {
+        broadcast(accepted.askerId, { type: 'accepted', connection: accepted });
+        broadcast(accepted.helperId, { type: 'accepted', connection: accepted });
+        sendJson(res, 201, accepted);
+        return true;
+      }
+    }
+    if (conn.status === 'pending') {
+      broadcast(helper.id, { type: 'request', connection: conn });
+      sendJson(res, 201, conn);
+      return true;
+    }
+    sendJson(res, 200, conn);
     return true;
   }
 
