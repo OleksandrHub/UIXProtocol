@@ -1,14 +1,16 @@
-export const REQUEST_TIMEOUT_MS = 20000;
+export const REQUEST_TIMEOUT_MS = 300000;
 export const FILE_TTL_MS = 40 * 60 * 60 * 1000;
 export const FILE_PROCESSING_POLL_MS = 1000;
-export const FILE_PROCESSING_TIMEOUT_MS = 120000;
+export const FILE_PROCESSING_TIMEOUT_MS = 300000;
 
 export const KNOWN_MODELS = [
-  'gemini-3-pro-preview',
-  'gemini-3-flash-preview',
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
   'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
+  'gemini-3.1-pro-preview',
+  'gemini-3-flash-preview',
 ] as const;
 
 export const STRUCTURED_SUFFIX = `

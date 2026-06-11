@@ -42,7 +42,7 @@ async function callOnce(
   const response = await client.models.generateContent({
     model,
     config: {
-      thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 3000 },
+      thinkingConfig: { thinkingBudget: model.includes('pro') ? 3000 : 1000 },
     },
     contents,
   });
