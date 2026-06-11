@@ -3,7 +3,7 @@ import * as https from 'node:https';
 import * as os from 'node:os';
 import { URL } from 'node:url';
 
-const PORT = 8787;
+const PORT = Number(process.argv[2]) || 8787;
 
 http
   .createServer((req, res) => {

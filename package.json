@@ -5,6 +5,7 @@
   "scripts": {
     "start": "npm run build:frontend && tsx ./scripts/server/server.ts",
     "start:laptop-proxy": "tsx ./scripts/tools/laptop-proxy.ts",
+    "start:relay": "ssh -R ${RELAY_PORT:-8787}:localhost:${RELAY_PORT:-8787} -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -N ${RELAY_HOST:-root@178.105.54.231} & npm run start:laptop-proxy -- ${RELAY_PORT:-8787}",
     "build": "npm run build:frontend && tsc",
     "build:frontend": "npm run build:html && npm run build:css",
     "build:assets": "npm run build:frontend",
