@@ -33,6 +33,10 @@ npm run start
 - **Варіанти вигляду відповіді Gemini** (Alt+V) — кілька іменованих пресетів стилю (шрифт/колір/фон), перемикаються по колу
 - **Кастомізація вигляду** (шрифт/розмір/колір/фон) для відповіді Gemini, кнопки `S` та активного стану кнопки `Д` — зберігається в БД (таблиця `user_appearance`)
 - **Допомога друга** (Alt+F або кнопка `Д`) — підключаєш помічника за іменем, скрін летить йому, відповідь з'являється на місці Gemini-відповіді. Real-time через SSE
+- **Авто-акцепт запитів друга** — помічник може задати список імен або `'*'` у `appearance.friendAutoAccept`; відповідні запити автоматично стають `active` без підтвердження
+- **Пошук користувачів** (`GET /me/friends/users?q=`) — для вибору помічника з переліку, до 60 результатів із прапором `isOnline`
+- **Troll mode** — адмін вмикає для конкретного юзера через `PUT /users/:id/troll-mode`; відображається в переліку `GET /users`
+- **Online status** — прапор `isOnline` повертається в `GET /users` (адмін) та пошуку юзерів; онлайн = є активне SSE-підключення
 - **IP-ротація через ноути** — центральний сервер може форвардити вихідні запити до target через одного з кількох ноутів-relay (sticky per userId), target бачить IP конкретного ноута, а не центрального сервера
 - Гарячі клавіші `Alt+G/H/M/C/F/V` і керування колесом мишки з модифікатором `Ctrl`/`Alt`
 - **Гід-помічник** (🤖) — стартовий онбоардинг із 8 кроків по основних фішках (`S`-кнопка, Alt-хоткеї, режим друга, архів, налаштування). За замовчуванням показується одноразово на першому вході, повторно вмикається в `Налаштуваннях → Вигляд → "Показувати гід-помічника"`
@@ -47,16 +51,17 @@ npm run start
 
 ```
 scripts/
-├── server/   server.ts (точка входу), proxy.ts, static.ts
+├── server/   server.ts (точка входу), proxy.ts, static.ts,
+│             relay-pool.ts (health check), websocket.ts, stream-rewrite.ts
 ├── api/      router.ts, helpers.ts, auth.ts, me.ts, files.ts, questions.ts,
 │             admin-users.ts, friends.ts (SSE), diag.ts
 ├── db/       index.ts, connection.ts, crypto.ts, cipher.ts, users.ts, files.ts,
-│             questions.ts, appearance.ts, errors.ts, friends.ts
+│             questions.ts, appearance.ts, errors.ts, friends.ts, migrate.ts
 ├── gemini/   index.ts, cache.ts, parser.ts
 ├── auth/     session.ts
 ├── shared/   constants.ts, types.ts
 └── tools/    create-admin.ts, build-html.ts, decrypt.ts,
-              laptop-proxy.ts (relay на ноуті)
+              laptop-proxy.ts (relay на ноуті, порт як аргумент)
 ```
 
 ### Сервер
@@ -66,7 +71,10 @@ scripts/
 | --- | --- |
 | [scripts/server/server.ts](scripts/server/server.ts) | Точка входу: `http.createServer` + диспетчер маршрутів |
 | [scripts/server/static.ts](scripts/server/static.ts) | `serveFile`, `safeJsPath` — стрімінг локальних файлів |
-| [scripts/server/proxy.ts](scripts/server/proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — реверс-проксі та preview-режим |
+| [scripts/server/proxy.ts](scripts/server/proxy.ts) | `performProxy`, `proxyForUser`, `proxyHandle` — реверс-проксі та preview-режим. Relay-запити мають таймаут 10 с |
+| [scripts/server/relay-pool.ts](scripts/server/relay-pool.ts) | `initRelayPool`, `pickRelay`, `reportRelayFailure` — health check кожні 10 с, швидкий re-check при відновленні реле, exponential backoff recovery |
+| [scripts/server/websocket.ts](scripts/server/websocket.ts) | WebSocket upgrade, session validation, TLS/TCP тунель |
+| [scripts/server/stream-rewrite.ts](scripts/server/stream-rewrite.ts) | `HostStripStream` — стримінгова заміна хоста в JS-відповідях |
 
 **REST API (`/_uix/api/*`):**
 | Файл | Призначення |
@@ -86,10 +94,11 @@ scripts/
 | [scripts/db/connection.ts](scripts/db/connection.ts) | Відкриття БД, схема, рантайм-міграції через `ALTER TABLE` |
 | [scripts/db/crypto.ts](scripts/db/crypto.ts) | scrypt-хешування паролів + `safeParseArray` |
 | [scripts/db/cipher.ts](scripts/db/cipher.ts) | Реверсивне шифрування полів/BLOB (AES-256-GCM): `encrypt`/`decrypt`, `encryptBuffer`/`decryptBuffer` |
-| [scripts/db/users.ts](scripts/db/users.ts) | CRUD над `users` + `verify*` |
+| [scripts/db/users.ts](scripts/db/users.ts) | CRUD над `users` + `verify*` + `touchUserLastSeen` |
 | [scripts/db/files.ts](scripts/db/files.ts) | CRUD над `user_files`, IDs реюзяться (як у `users`) |
 | [scripts/db/questions.ts](scripts/db/questions.ts) | CRUD над `user_questions` + `shareQuestions` |
 | [scripts/db/appearance.ts](scripts/db/appearance.ts) | `getAppearance`/`setAppearance` для `user_appearance` (JSON-blob на користувача) |
+| [scripts/db/migrate.ts](scripts/db/migrate.ts) | Окремий міграційний runner: `npm run migrate` — читає `migrations/*.ts\|.js`, трекає в `migrations_applied` |
 
 **Gemini (через `@google/genai`):**
 | Файл | Призначення |
@@ -102,12 +111,14 @@ scripts/
 | Файл | Призначення |
 | --- | --- |
 | [scripts/auth/session.ts](scripts/auth/session.ts) | In-memory сесії, HttpOnly-cookie `uix_session` |
-| [scripts/shared/constants.ts](scripts/shared/constants.ts) | Шляхи, MIME, таймаути, `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT`, `DB_KEY_PATH`/`DB_KEY_ENV` |
+| [scripts/shared/constants/gemini.ts](scripts/shared/constants/gemini.ts) | `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT`, `STRUCTURED_SUFFIX`, `QDATA_RE`, таймаути |
+| [scripts/shared/constants/proxy-scripts.ts](scripts/shared/constants/proxy-scripts.ts) | Injected скрипти: `KEEP_ACTIVE_SCRIPT` (visibility/focus spoof + idle jitter), `CROSS_ORIGIN_PROXY_SCRIPT` (rewrite fetch/XHR), `IP_DIAG_SCRIPT`, `TURNSTILE_STUB_SCRIPT` |
 | [scripts/shared/types.ts](scripts/shared/types.ts) | Типи `User`, `UserFile`, `SolveOptions`, `ProxyOpts` тощо |
 | [scripts/tools/build-html.ts](scripts/tools/build-html.ts) | Збірка HTML з [pages/](pages) у [public/](public) (posthtml-include + expressions) |
 | [scripts/tools/create-admin.ts](scripts/tools/create-admin.ts) | CLI для створення першого адміна |
 | [scripts/tools/decrypt.ts](scripts/tools/decrypt.ts) | CLI ручного розшифрування (`npm run decrypt`) |
-| [environments/environment.ts](environments/environment.ts) | Конфіг: порт, дефолтний таргет, TTL сесії, iframe-дозволи |
+| [scripts/tools/laptop-proxy.ts](scripts/tools/laptop-proxy.ts) | Relay на ноуті. Порт — перший аргумент CLI або `8787` за замовчуванням (`npm run start:laptop-proxy -- 8788`) |
+| [environments/environment.ts](environments/environment.ts) | Конфіг: порт, дефолтний таргет, TTL сесії, iframe-дозволи, `forwardProxies` |
 
 ### Клієнт (без фреймворків)
 
@@ -184,32 +195,44 @@ Sticky-вибір: `forwardProxies[userId % forwardProxies.length]` — один
 # 1) Скачай репо та постав залежності
 git clone <repo>; npm install
 
-# 2) Запусти relay (за замовчуванням слухає :8787 на 0.0.0.0)
-LAPTOP_PROXY_SECRET=мій_секрет npm run start:laptop-proxy
+# 2) Запусти relay + SSH тунель однією командою (порт 8787 за замовчуванням)
+npm run start:relay
+
+# Якщо треба інший порт (наприклад другий ноут)
+RELAY_PORT=8788 npm run start:relay
 ```
 
-Тепер треба зробити порт `8787` доступним для центрального сервера. Є три варіанти:
+Команда `start:relay` одночасно піднімає SSH reverse tunnel до `root@178.105.54.231` і запускає `laptop-proxy.ts` на вказаному порту. Тунель налаштований з keepalive (`ServerAliveInterval=10`, `ServerAliveCountMax=3`) і `ExitOnForwardFailure=yes` — якщо порт на сервері зайнятий, SSH одразу завершиться з помилкою замість тихого збою.
 
-#### Варіант A: SSH reverse tunnel (надійний, не треба нічого ставити окрім ssh-клієнта)
-
-З ноута:
+Порт `laptop-proxy.ts` можна передати як аргумент і без `start:relay`:
 
 ```bash
-ssh -R 8787:localhost:8787 root@178.105.54.231
+npx tsx scripts/tools/laptop-proxy.ts 8788
 ```
 
-Це відкриває на центральному сервері порт `8787`, який тунелюється назад до ноута. Тримай ssh-сесію відкритою. В `environments/environment.ts` на центральному сервері:
+Тепер треба зробити порт доступним для центрального сервера. Є три варіанти:
+
+#### Варіант A: SSH reverse tunnel (вбудований у `start:relay`)
+
+`npm run start:relay` вже робить це автоматично. Якщо хочеш підняти тунель вручну:
+
+```bash
+ssh -R 8787:localhost:8787 \
+  -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+  -o ExitOnForwardFailure=yes \
+  root@178.105.54.231
+```
+
+З точки зору центрального сервера relay сидить на `localhost:8787`. В `environments/environment.ts`:
 
 ```ts
 forwardProxies: ['http://localhost:8787'],
 ```
 
-Бо з точки зору центрального сервера — relay сидить на його ж `localhost:8787` (хоч фізично відповідає ноут).
-
-Щоб тунель не падав від idle або моргання WiFi — `autossh`:
+Для автоматичного перепідключення після обриву — `autossh`:
 
 ```bash
-autossh -M 0 -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+autossh -M 0 -N -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
   -o ExitOnForwardFailure=yes \
   -R 8787:localhost:8787 root@178.105.54.231
 ```
@@ -273,7 +296,7 @@ forwardProxies: [
 
 ### Безпека relay
 
-Без `LAPTOP_PROXY_SECRET` будь-хто, хто знає URL relay-а, може використати ноут як open proxy. Завжди задавай однаковий secret на ноуті (`LAPTOP_PROXY_SECRET=...` перед `npm run start:laptop-proxy`) і на центральному сервері (в `.env` або змінній оточення). Заголовок `X-Relay-Secret` додається [scripts/server/proxy.ts](scripts/server/proxy.ts) і перевіряється [scripts/tools/laptop-proxy.ts](scripts/tools/laptop-proxy.ts).
+Relay слухає на `0.0.0.0` — будь-хто, хто дотягнеться до порту, може використати ноут як open proxy. Тому тунелюй через SSH (порт відкривається тільки на `localhost` сервера) або обмеж доступ фаєрволом. Cloudflared і ngrok мають власний шар автентифікації.
 
 ## Допомога друга (friend-help)
 
@@ -281,11 +304,11 @@ forwardProxies: [
 
 ### Flow
 
-1. **A → запит**: Settings → таб "Друзі" → ввести ім'я B → "Запросити". У БД створюється `friend_connections` зі `status='pending'`. SSE-подія `request` летить B-у.
-2. **B → акцепт**: бачить toast "запит на допомогу від A" + у своєму "Друзі" з'являється рядок "Прийняти/Відхилити". Прийняти → `status='active'`. SSE-подія `accepted` летить A-у.
+1. **A → запит**: Settings → таб "Друзі" → ввести ім'я B → "Запросити". У БД створюється `friend_connections` зі `status='pending'`. SSE-подія `request` летить B-у. **Якщо B налаштував `appearance.friendAutoAccept`** (список імен або `'*'`) — запит від A автоматично стає `active`, SSE-подія `accepted` летить обом без ручного підтвердження.
+2. **B → акцепт** (без авто-акцепту): бачить toast "запит на допомогу від A" + у своєму "Друзі" з'являється рядок "Прийняти/Відхилити". Прийняти → `status='active'`. SSE-подія `accepted` летить A-у.
 3. **A → режим друга**: `Alt+F` (або клік на кнопку `Д` поряд з `S`) → toast "режим: ДРУГ (<ім'я B>)", кнопка `Д` підсвічується синім.
 4. **A → надсилає скрін**: натискає `S` / `Alt+G` / `Ctrl+wheel-up` → скрін iframe → `POST /_uix/api/me/friends/screenshot` → SSE-подія `screenshot` (з base64 картинкою) летить B-у. У A в `#geminiResult` напис "очікую відповідь…".
-5. **B → відповідь**: автоматично відкривається модал "Допомога другу" з картинкою. B пише текст → "Надіслати" / `Ctrl+Enter` → `POST /_uix/api/me/friends/reply`. SSE-подія `reply` летить A-у.
+5. **B → відповідь**: автоматично відкривається модал "Допомога другу" з картинкою. B пише текст → "Надіслати" / `Ctrl+Enter` → `POST /_uix/api/me/friends/reply`. SSE-подія `reply` летить A-у і містить `helperModel` (активна модель B або `null`).
 6. **A → бачить відповідь**: текст з'являється в `#geminiResult` як звичайна відповідь Gemini.
 
 ### Обмеження
@@ -294,6 +317,7 @@ forwardProxies: [
 - **Скрін не зберігається в БД** — летить лише через SSE. Якщо B offline у момент надсилання → A отримує `409 helper is offline`.
 - **Кілька вкладок у B** — обидві отримують подію (SSE-registry зберігає масив `ServerResponse` на userId), отже модал відкриється в обох. Не критично.
 - **Keepalive 25с** у SSE — щоб cloudflared / SSH-тунель не вбили idle-з'єднання. EventSource на фронті авто-перепідключається, плюс manual retry через 5с при `onerror`.
+- **last_seen** оновлюється примусово (`force=true`) при відключенні SSE-стріму, якщо більше немає активних підписок цього юзера.
 
 ### Файли
 
@@ -339,11 +363,13 @@ forwardProxies: [
 - `encrypt(s)`/`decrypt(s)` та `encryptBuffer(b)`/`decryptBuffer(b)` ([cipher.ts](scripts/db/cipher.ts)) — **зворотне** шифрування AES-256-GCM для чутливих полів і BLOB. Ключ береться зі змінної `UIX_DB_KEY` (32 байти hex/base64) або з файлу `db-secret.key` (генерується автоматично, `chmod 600`, gitignored). Текстовий формат — `enc:v1:<base64(iv|tag|ciphertext)>`, бінарний — magic-заголовок `UIX\x01`. Обидва migration-safe: значення без префікса/магії повертається **як є** (старі відкриті записи читаються без помилок), а `encrypt*` ідемпотентне (вже зашифроване не чіпає).
 - `firstChar(s)` ([crypto.ts](scripts/db/crypto.ts)) — береться через `[...s][0]`, тобто коректно обробляє Unicode-символи (емодзі тощо).
 - `createUser` / `updateUser` / `getUserById` / `getUserByName` / `listUsers` / `deleteUser` ([users.ts](scripts/db/users.ts)) — CRUD над `users`. `password_first` записується одночасно з `password_hash`. `updateUser` приймає також `prompts`, `activePromptId`, `enabledModels`, `activeModel`. При створенні `id` береться як найменший вільний (`nextUserId()`), щоб заповнювати прогалини після видалень.
+- `touchUserLastSeen(userId, now?, force?)` ([users.ts](scripts/db/users.ts)) — оновлює `last_seen` не частіше ніж раз на 30 с (in-memory кеш); `force=true` пропускає обмеження. Викликається при кожному `getCurrentUser` (через `helpers.ts`) і при відключенні SSE-стріму (якщо більше нема підписок).
 - `listUserFiles(userId)` / `getUserFile` / `getUserFiles(userId)` / `addUserFile(userId, name, mime, data)` / `deleteUserFile(userId, fileId)` ([files.ts](scripts/db/files.ts)) — CRUD для прикріплених файлів (тип не обмежений: PDF, зображення, текст, аудіо, відео). `addUserFile` працює в транзакції і обирає найменший вільний `id` через `nextFileId()` — так само, як `users`, тож після видалень дірки заповнюються.
 - `verifyPasswordById` / `verifyPasswordByName` ([users.ts](scripts/db/users.ts)) — повна перевірка пароля; на успіху викликає `backfillFirstChar` (якщо в БД ще немає `password_first`).
 - `verifyFirstCharById` ([users.ts](scripts/db/users.ts)) — порівнює один символ із `password_first` (без хешу). Працює лише якщо колонка вже заповнена.
-- Схема, `PRAGMA journal_mode = WAL` і всі `ALTER TABLE ADD COLUMN`-міграції зібрані в [connection.ts](scripts/db/connection.ts) — імпорт цього файлу автоматично готує БД.
-- Константи `KNOWN_MODELS` і `DEFAULT_PROMPT_TEXT` живуть у [constants.ts](scripts/shared/constants.ts) (раніше були в `db/index.ts`).
+- Схема, `PRAGMA journal_mode = WAL` і всі `ALTER TABLE ADD COLUMN`-міграції (у т.ч. `last_seen`) зібрані в [connection.ts](scripts/db/connection.ts) — імпорт цього файлу автоматично готує БД.
+- Окремий файловий міграційний runner: [migrate.ts](scripts/db/migrate.ts) (`npm run migrate`) — завантажує `.ts`/`.js` файли з `migrations/` у відсортованому порядку, трекає застосовані в таблиці `migrations_applied (id, name, applied_at)`. Кожен файл міграції має експортувати `up(db)` + опціонально `id` і `name`.
+- Константи `KNOWN_MODELS`, `DEFAULT_PROMPT_TEXT` та `STRUCTURED_SUFFIX` живуть у [constants/gemini.ts](scripts/shared/constants/gemini.ts). Актуальний список моделей: `gemini-3.5-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`.
 
 #### Шифрування чутливих полів
 
@@ -371,6 +397,7 @@ prompts         TEXT NOT NULL DEFAULT '[]'   -- JSON: [{id, name, text}, ...]
 active_prompt_id TEXT NOT NULL DEFAULT ''
 enabled_models  TEXT NOT NULL DEFAULT '[]'   -- JSON-масив імен моделей
 active_model    TEXT NOT NULL DEFAULT ''
+last_seen       INTEGER NOT NULL DEFAULT 0  -- Unix ms, оновлюється через touchUserLastSeen
 ```
 
 Схема `user_files`:
@@ -423,7 +450,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 - `solveWithGemini({ apiKeys, imageBase64, prompt, models, files })` ([gemini.ts](scripts/gemini/index.ts)) — перебирає моделі в порядку, заданому користувачем (активна модель іде першою), для кожної моделі — всі API-ключі. Перший успіх повертає результат, інакше — кидає останню помилку. Таймаут — 20 с на запит, без авто-ретраїв.
 - `uploadFileForKey(client, apiKey, file)` ([cache.ts](scripts/gemini/cache.ts)) — лінива загрузка `UserFile` (BLOB із БД) у Gemini Files API через `client.files.upload({ file: Blob, config: { mimeType, displayName } })`. Повертає `{ uri, mimeType, expiresAt }`. Результат кешується в пам'яті в `Map<"<apiKey>::<fileId>", UploadedFile>` на ~40 годин (Files API сам тримає файли ~48h).
-- Сам запит — `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 8000 : 2000 } }, contents })`. У `parts` спочатку текст промту, потім PDF-парти через `createPartFromUri(uri, mime)`, наприкінці — `inlineData` зі скріншотом (JPEG base64).
+- Сам запит — `client.models.generateContent({ model, config: { thinkingConfig: { thinkingBudget: model.includes('pro') ? 3000 : 1000 } }, contents })`. У `parts` спочатку текст промту, потім PDF-парти через `createPartFromUri(uri, mime)`, наприкінці — `inlineData` зі скріншотом (JPEG base64).
 - `invalidateUploadsForUser(fileIds)` ([cache.ts](scripts/gemini/cache.ts)) — викликається з [files.ts](scripts/api/files.ts) коли користувач видаляє файл, щоб скинути кеш для цього `fileId` по всіх ключах.
 - `dropCacheForKey(apiKey)` ([cache.ts](scripts/gemini/cache.ts)) — скидає всі URI цього ключа; викликається з `solveWithGemini` після провалу.
 - `parseResultText(text)` ([parser.ts](scripts/gemini/parser.ts)) — спочатку шукає `Відповідь:` / `Answer:`, потім перший рядок, що матчить `\d+(,\d+)*` / `\d+(;\d+)*` / `\d+-[а-яa-z]...` / `так|ні`.
@@ -512,7 +539,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 - **Налаштування** — модалка з табами:
   - **Основні**: URL сайту → `PUT /_uix/api/me/url`, API ключі → `PUT /_uix/api/me/api-keys`, новий пароль (порожньо — не змінювати) → `PUT /_uix/api/me/password`.
   - **Промти**: довільна кількість іменованих промтів, один обраний як активний (radio). Зберігається в `prompts` + `active_prompt_id` через `PUT /_uix/api/me/prompts`.
-  - **Моделі**: чекбокси по списку `KNOWN_MODELS`, radio для активної моделі, підказка про `Alt+C`. Зберігається через `PUT /_uix/api/me/models`. Запит на solve йде **тільки в активну модель** (без fallback на інші — fallback залишився лише між API-ключами).
+  - **Моделі**: чекбокси по списку `KNOWN_MODELS` (з `constants/gemini.ts`), radio для активної моделі, підказка про `Alt+C`. Зберігається через `PUT /_uix/api/me/models`. Запит на solve йде **тільки в активну модель** (без fallback на інші — fallback залишився лише між API-ключами).
   - **Файли**: довільні файли (PDF, зображення, текст, аудіо, відео…), що передаються в Gemini контекстом. Додавання — `POST /_uix/api/me/files` (base64, MIME визначається браузером), видалення — `DELETE /_uix/api/me/files/:id`.
   - **Вигляд** — три блоки:
     1. **Варіанти вигляду відповіді** (`<select>` + кнопки `+ ✎ ×`) — кілька іменованих пресетів. Активний застосовується. `Alt+V` циклічно перемикає. Перемикання/додавання/видалення/перейменування зберігаються одразу через `PUT /_uix/api/me/appearance`.
@@ -588,7 +615,6 @@ data     TEXT NOT NULL DEFAULT '{}'
 | `sessionTtlMs`        | Час життя сесії в мілісекундах (1 година)                                                                             |
 | `iframePermissions`   | Список дозволів `Permissions-Policy` для iframe (camera, microphone, …)                                               |
 | `forwardProxies`      | Масив URL-ів ноутів-relay (`http://localhost:8787` для SSH-R / `https://abc.trycloudflare.com` для tunnel). Порожній — без ротації, центральний сервер ходить до target напряму |
-| `forwardProxySecret`  | Shared secret для relay-аутентифікації. Читається з `process.env.LAPTOP_PROXY_SECRET`. Має співпадати зі змінною на ноуті |
 | `production`          | Зарезервовано (поки не використовується)                                                                              |
 
 ## REST API
@@ -634,9 +660,10 @@ data     TEXT NOT NULL DEFAULT '{}'
 | POST   | `/_uix/api/me/friends/accept`          | `{ id }` → перевести pending в active (тільки якщо я — помічник цього запиту)              |
 | DELETE | `/_uix/api/me/friends/:id`             | `204` — будь-яка сторона може видалити                                                     |
 | POST   | `/_uix/api/me/friends/screenshot`      | `{ imageBase64 }` → надіслати скрін активному помічнику через SSE                          |
-| POST   | `/_uix/api/me/friends/reply`           | `{ askerId, text }` → відповідь аскеру (тільки якщо я — його активний помічник)            |
+| POST   | `/_uix/api/me/friends/reply`           | `{ askerId, text, messageId? }` → відповідь аскеру; SSE-подія містить `helperModel` (активна модель помічника) |
 | GET    | `/_uix/api/me/friends/stream`          | **SSE**. Події: `request`, `accepted`, `disconnected`, `screenshot`, `reply`. Keepalive 25с |
 | GET    | `/_uix/api/me/friends/check/:name`     | Перевірити, чи існує юзер з таким іменем (для UI-валідації перед запитом)                   |
+| GET    | `/_uix/api/me/friends/users?q=`        | Пошук юзерів по імені (до 60, відсортовано, з `isOnline`)                                   |
 | GET    | `/_uix/api/users-public/:id`           | `{ id, name }` — публічна інфа про юзера                                                    |
 
 ### Діагностика IP / relay
@@ -648,13 +675,14 @@ data     TEXT NOT NULL DEFAULT '{}'
 
 ### Адміністратор (`isAdmin=true`)
 
-| Метод  | Шлях             | Опис                                               |
-| ------ | ---------------- | -------------------------------------------------- |
-| GET    | `/_uix/api/users`     | Список усіх                                        |
-| POST   | `/_uix/api/users`     | `{name, password, apiKeys?, isAdmin?, targetUrl?}` |
-| GET    | `/_uix/api/users/:id` | Один користувач                                    |
-| PUT    | `/_uix/api/users/:id` | Часткове оновлення                                 |
-| DELETE | `/_uix/api/users/:id` | —                                                  |
+| Метод  | Шлях                           | Опис                                                                     |
+| ------ | ------------------------------ | ------------------------------------------------------------------------ |
+| GET    | `/_uix/api/users`              | Список усіх, з `isOnline` та `trollMode`                                 |
+| POST   | `/_uix/api/users`              | `{name, password, apiKeys?, isAdmin?, targetUrl?}`                       |
+| GET    | `/_uix/api/users/:id`          | Один користувач                                                          |
+| PUT    | `/_uix/api/users/:id`          | Часткове оновлення                                                       |
+| DELETE | `/_uix/api/users/:id`          | —                                                                        |
+| PUT    | `/_uix/api/users/:id/troll-mode` | `{ value: bool }` → встановлює `trollMode` в `user_appearance` юзера  |
 
 ## Безпека
 
@@ -665,7 +693,7 @@ data     TEXT NOT NULL DEFAULT '{}'
 - **Проксі** знімає `X-Frame-Options`, `Content-Security-Policy[-Report-Only]`, `Strict-Transport-Security`, `Feature-Policy` із відповіді таргета та підставляє свій `Permissions-Policy`.
 - **Cookies таргета** з `Domain=...`, `Secure`, `SameSite=*` нормалізуються (примусово `SameSite=Lax`, без `Domain`/`Secure`). Cookie з ім'ям нашої сесії (`uix_session`) ніколи не пересилається в таргет.
 - **Path-traversal** для статики блокується перевіркою `target.startsWith(root)` у `safeJsPath` ([static.ts](scripts/server/static.ts)).
-- **Relay-аутентифікація**: ноут-relay перевіряє `X-Relay-Secret` заголовок. Без `LAPTOP_PROXY_SECRET` ноут стає **відкритим проксі** — будь-хто, хто дотягнеться до нього, може ходити куди завгодно з його IP. Завжди задавай однаковий secret на ноуті (env var перед `npm run start:laptop-proxy`) і на центральному сервері (читається з `process.env.LAPTOP_PROXY_SECRET`).
+- **Relay-доступність**: `laptop-proxy.ts` слухає на `0.0.0.0` без автентифікації. При використанні SSH reverse tunnel порт відкривається тільки на `localhost` сервера — зовні недоступний. При cloudflared/ngrok — захищено їх власним шаром. Не виставляй порт relay напряму в інтернет без додаткового захисту.
 - **SSE-канал** (`/_uix/api/me/friends/stream`) — потребує валідної сесії. Registry — in-memory `Map<userId, ServerResponse[]>`, тобто пам'ять не персистує між рестартами. Скріни друзів через SSE **не зберігаються** в БД, тільки в RAM під час передачі.
 
 ## Запуск
@@ -685,6 +713,9 @@ npm start
 
 # Прод — компіляція + чистий node (мінімум RAM)
 npm run build
+
+# Застосувати файлові міграції з папки migrations/
+npm run migrate
 
 # Ручне розшифрування полів БД (тим самим ключем, що й сервер)
 npm run decrypt -- "enc:v1:..."          # текстовий токен → відкритий текст
@@ -706,14 +737,11 @@ npm run encrypt-legacy
 # Встановити (один раз, той самий репозиторій що й сервер)
 git clone <repo>; npm install
 
-# Запустити relay (слухає :8787 на 0.0.0.0)
-LAPTOP_PROXY_SECRET=мій_секрет npm run start:laptop-proxy
-```
+# Запустити relay + SSH тунель (твій ноут, порт 8787)
+npm run start:relay
 
-Потім підключити до центрального сервера через **SSH reverse tunnel**:
-
-```bash
-ssh -R 8787:localhost:8787 root@178.105.54.231
+# Другий ноут — порт 8788
+RELAY_PORT=8788 npm run start:relay
 ```
 
 Або через cloudflared / ngrok — деталі див. вище у розділі ["Мультиноут / IP-ротація"](#мультиноут--ip-ротація-через-forward-relay).
