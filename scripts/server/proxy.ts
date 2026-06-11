@@ -211,6 +211,7 @@ function performProxy(
       path: outboundPath,
       method: req.method,
       headers: incomingHeaders,
+      timeout: fwdProxy ? 10_000 : undefined,
     },
     (proxyRes) => {
       const headers: http.OutgoingHttpHeaders = { ...proxyRes.headers };
@@ -315,6 +316,13 @@ function performProxy(
   );
 
   req.pipe(proxyReq);
+
+  proxyReq.on('timeout', () => {
+    proxyReq.destroy();
+    if (fwdProxy) reportRelayFailure(fwdProxy, 'timeout');
+    if (!res.headersSent) res.writeHead(504, { 'Content-Type': 'text/plain' });
+    res.end('Proxy timeout');
+  });
 
   proxyReq.on('error', (err) => {
     console.error('[Proxy Error]', err.message);

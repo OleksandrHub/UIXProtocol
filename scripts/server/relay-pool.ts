@@ -93,7 +93,13 @@ export function initRelayPool(): Promise<void> {
     if (status.length === 0) return;
     await checkAll();
     setInterval(() => {
-      void checkAll();
+      const hadUnhealthy = status.some((s) => !s.healthy);
+      void checkAll().then(() => {
+        if (hadUnhealthy && status.some((s) => s.healthy)) {
+          // a relay just came back — recheck sooner to confirm stability
+          setTimeout(() => void checkAll(), RECHECK_AFTER_FAIL_MS * 2);
+        }
+      });
     }, HEALTH_CHECK_INTERVAL_MS).unref();
   })();
   return initPromise;
